@@ -2,6 +2,7 @@
 pragma solidity =0.6.6;
 
 import '../pangolin-core/interfaces/IPangolinFactory.sol';
+import '../pangolin-core/interfaces/IPangolinERC20.sol';
 import '../pangolin-lib/libraries/TransferHelper.sol';
 
 import './interfaces/IPangolinRouter.sol';
@@ -111,7 +112,7 @@ contract PangolinRouter is IPangolinRouter {
         uint deadline
     ) public virtual override ensure(deadline) returns (uint amountA, uint amountB) {
         address pair = PangolinLibrary.pairFor(factory, tokenA, tokenB);
-        IPangolinPair(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
+        IPangolinERC20(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
         (uint amount0, uint amount1) = IPangolinPair(pair).burn(to);
         (address token0,) = PangolinLibrary.sortTokens(tokenA, tokenB);
         (amountA, amountB) = tokenA == token0 ? (amount0, amount1) : (amount1, amount0);
@@ -151,7 +152,7 @@ contract PangolinRouter is IPangolinRouter {
     ) external virtual override returns (uint amountA, uint amountB) {
         address pair = PangolinLibrary.pairFor(factory, tokenA, tokenB);
         uint value = approveMax ? uint(-1) : liquidity;
-        IPangolinPair(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
+        IPangolinERC20(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
         (amountA, amountB) = removeLiquidity(tokenA, tokenB, liquidity, amountAMin, amountBMin, to, deadline);
     }
     function removeLiquidityAVAXWithPermit(
@@ -165,7 +166,7 @@ contract PangolinRouter is IPangolinRouter {
     ) external virtual override returns (uint amountToken, uint amountAVAX) {
         address pair = PangolinLibrary.pairFor(factory, token, WAVAX);
         uint value = approveMax ? uint(-1) : liquidity;
-        IPangolinPair(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
+        IPangolinERC20(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
         (amountToken, amountAVAX) = removeLiquidityAVAX(token, liquidity, amountTokenMin, amountAVAXMin, to, deadline);
     }
 
@@ -202,7 +203,7 @@ contract PangolinRouter is IPangolinRouter {
     ) external virtual override returns (uint amountAVAX) {
         address pair = PangolinLibrary.pairFor(factory, token, WAVAX);
         uint value = approveMax ? uint(-1) : liquidity;
-        IPangolinPair(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
+        IPangolinERC20(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
         amountAVAX = removeLiquidityAVAXSupportingFeeOnTransferTokens(
             token, liquidity, amountTokenMin, amountAVAXMin, to, deadline
         );

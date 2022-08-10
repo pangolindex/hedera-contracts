@@ -219,7 +219,7 @@ abstract contract HederaTokenService is HederaResponseCodes {
         (responseCode, tokenAddress) = success ? abi.decode(result, (int32, address)) : (HederaResponseCodes.UNKNOWN, address(0));
     }
 
-    /// Allows spender to withdraw from your account multiple times, up to the value amount. If this function is called 
+    /// Allows spender to withdraw from your account multiple times, up to the value amount. If this function is called
     /// again it overwrites the current allowance with value.
     /// Only Applicable to Fungible Tokens
     /// @param token The hedera token address to approve
@@ -267,7 +267,7 @@ abstract contract HederaTokenService is HederaResponseCodes {
     /// @param token The Hedera NFT token address to check approval
     /// @param serialNumber The NFT to find the approved address for
     /// @return responseCode The response code for the status of the request. SUCCESS is 22.
-    /// @return approved The approved address for this NFT, or the zero address if there is none    
+    /// @return approved The approved address for this NFT, or the zero address if there is none
     function getApproved(address token, uint256 serialNumber) internal returns (int responseCode, address approved)
     {
         (bool success, bytes memory result) = precompileAddress.call(
@@ -278,8 +278,8 @@ abstract contract HederaTokenService is HederaResponseCodes {
                 ? abi.decode(result, (int32, address))
                 : (HederaResponseCodes.UNKNOWN, address(0));
     }
-    
-    
+
+
     /// Enable or disable approval for a third party ("operator") to manage
     ///  all of `msg.sender`'s assets
     /// @param token The Hedera NFT token address to approve
@@ -293,7 +293,7 @@ abstract contract HederaTokenService is HederaResponseCodes {
             token, operator, approved));
         responseCode = success ? abi.decode(result, (int32)) : HederaResponseCodes.UNKNOWN;
     }
-    
+
 
     /// Query if an address is an authorized operator for another address
     /// Only Applicable to NFT Tokens

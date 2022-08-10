@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity =0.5.16;
+pragma solidity =0.6.12;
 
 import './interfaces/IPangolinFactory.sol';
 import './PangolinPair.sol';
 
 contract PangolinFactory is IPangolinFactory {
-    address public feeTo;
-    address public feeToSetter;
+    address public override feeTo;
+    address public override feeToSetter;
 
     mapping(address => mapping(address => address)) private _pairs;
 
@@ -16,11 +16,11 @@ contract PangolinFactory is IPangolinFactory {
         feeToSetter = _feeToSetter;
     }
 
-    function getPair(address tokenA, address tokenB) external view returns (address) {
+    function getPair(address tokenA, address tokenB) external view override returns (address) {
         return tokenA < tokenB ? _pairs[tokenA][tokenB] : _pairs[tokenB][tokenA];
     }
 
-    function createPair(address tokenA, address tokenB) external returns (address pair) {
+    function createPair(address tokenA, address tokenB) external override returns (address pair) {
         require(tokenA != tokenB, 'Pangolin: IDENTICAL_ADDRESSES');
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
         require(token0 != address(0), 'Pangolin: ZERO_ADDRESS');
@@ -30,17 +30,17 @@ contract PangolinFactory is IPangolinFactory {
         assembly {
             pair := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
-        IPangolinPair(pair).initialize(token0, token1);
+        PangolinPair(pair).initialize(token0, token1);
         _pairs[token0][token1] = pair;
         emit PairCreated(token0, token1, pair);
     }
 
-    function setFeeTo(address _feeTo) external {
+    function setFeeTo(address _feeTo) external override {
         require(msg.sender == feeToSetter, 'Pangolin: FORBIDDEN');
         feeTo = _feeTo;
     }
 
-    function setFeeToSetter(address _feeToSetter) external {
+    function setFeeToSetter(address _feeToSetter) external override {
         require(msg.sender == feeToSetter, 'Pangolin: FORBIDDEN');
         feeToSetter = _feeToSetter;
     }
