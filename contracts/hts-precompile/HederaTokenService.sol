@@ -226,7 +226,7 @@ abstract contract HederaTokenService is HederaResponseCodes {
     /// @param spender the account authorized to spend
     /// @param amount the amount of tokens authorized to spend.
     /// @return responseCode The response code for the status of the request. SUCCESS is 22.
-    function approve(address token, address spender, uint256 amount) internal returns (int responseCode)
+    function approveToken(address token, address spender, uint256 amount) internal returns (int responseCode)
     {
         (bool success, bytes memory result) = precompileAddress.call(
             abi.encodeWithSelector(IHederaTokenService.approve.selector,
@@ -240,7 +240,7 @@ abstract contract HederaTokenService is HederaResponseCodes {
     /// @param owner the owner of the tokens to be spent
     /// @param spender the spender of the tokens
     /// @return responseCode The response code for the status of the request. SUCCESS is 22.
-    function allowance(address token, address owner, address spender) internal returns (int responseCode, uint256 amount)
+    function getAllowance(address token, address owner, address spender) internal returns (int responseCode, uint256 amount)
     {
         (bool success, bytes memory result) = precompileAddress.call(
             abi.encodeWithSelector(IHederaTokenService.allowance.selector,

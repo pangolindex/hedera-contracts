@@ -9,7 +9,10 @@ import './interfaces/IERC20.sol';
 import './interfaces/IPangolinFactory.sol';
 import './interfaces/IPangolinCallee.sol';
 
-contract PangolinPair is IPangolinPair, PangolinERC20 {
+import '../hts-precompile/HederaResponseCodes.sol';
+import '../hts-precompile/HederaTokenService.sol';
+
+contract PangolinPair is IPangolinPair, PangolinERC20, HederaTokenService {
     using SafeMath  for uint;
     using UQ112x112 for uint224;
 
@@ -66,8 +69,31 @@ contract PangolinPair is IPangolinPair, PangolinERC20 {
     // called once by the factory at time of deployment
     function initialize(address _token0, address _token1) external override {
         require(msg.sender == factory, 'Pangolin: FORBIDDEN'); // sufficient check
+
+        _tryAssociating(_token0);
+        _tryAssociating(_token1);
+
         token0 = _token0;
         token1 = _token1;
+    }
+
+    function _tryAssociating(address token) private {
+        // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
+        int responseCode = associateToken(address(this), token);
+
+        // If association fails for native hedera token, the reserve token will be an ERC20.
+        if (responseCode != HederaResponseCodes.SUCCESS) {
+            // Only acceptable failed response is that the address is not Hedera token precompile.
+            require(responseCode == HederaResponseCodes.INVALID_TOKEN_ID, 'Pangolin: INVALID_TOKEN_ID');
+
+            // Ensure contract exists for ERC20. Allowing non-contract addresses might be
+            // problematic as contract addresses are sequential in Hedera.
+            uint256 size;
+            assembly {
+                size := extcodesize(token)
+            }
+            require(size > 0, 'Pangolin: EMPTY_ADDRESS');
+        }
     }
 
     // update reserves and, on the first call per block, price accumulators
