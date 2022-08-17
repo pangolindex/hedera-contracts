@@ -12,7 +12,7 @@ Contract versions were bumped to `0.6.12`. This required explicitly marking func
 
 [PangolinFactory](./contracts/pangolin-core/PangolinFactory.sol) was modified mildly to reduce storage. See commit a953141976e90a5c30685375293db7384e400d6c for details.
 
-HederaTokenService was integrated to [PangolinPair](./contracts/pangolin-core/PangolinPair.sol). It will try to associate both reserve tokens, and if association fails, it will assume the token to be ERC20. See commit 18d552a39e916c52c0606bf894f9cf88d114817a for details. With this imple
+HederaTokenService was integrated to [PangolinPair](./contracts/pangolin-core/PangolinPair.sol). It will try to associate both reserve tokens, and if association fails, it will assume the token to be ERC20. This simple modification allows a pair to consist of two ERC20 tokens, two Hedera tokens, or one Hedera token and an ERC20 token. See commit 18d552a39e916c52c0606bf894f9cf88d114817a for details.
 
 ### [TreasuryVester](./contracts/TreasuryVester.sol)
 
