@@ -19,8 +19,8 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
     Recipient[] public recipients;
 
-    uint32 private constant MAX_SUPPLY = 242_000_000 * 10**DECIMALS; // two-hundred-and-thirty-five million
-    uint32 private constant INITIAL_SUPPLY = 12_000_000 * 10**DECIMALS; // twelve million (airdrop supply)
+    uint32 private constant MAX_SUPPLY = 242_000_000 * uint32(10)**DECIMALS; // two-hundred-and-thirty-five million
+    uint32 private constant INITIAL_SUPPLY = 12_000_000 * uint32(10)**DECIMALS; // twelve million (airdrop supply)
     uint256 private constant DECIMALS = 8; // eight
     uint256 private constant SUPPLY_KEY = 16; // 4th bit (counting from 0) flipped, i.e. 10000 binary.
 
