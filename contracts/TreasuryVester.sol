@@ -19,8 +19,8 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
     Recipient[] public recipients;
 
-    uint32 private constant MAX_SUPPLY = 235_000_000 * 10**DECIMALS; // two-hundred-and-thirty-five million
-    uint32 private constant INITIAL_SUPPLY = 5_000_000 * 10**DECIMALS; // four million and five-hundred thousand (airdrop supply)
+    uint32 private constant MAX_SUPPLY = 242_000_000 * 10**DECIMALS; // two-hundred-and-thirty-five million
+    uint32 private constant INITIAL_SUPPLY = 12_000_000 * 10**DECIMALS; // twelve million (airdrop supply)
     uint256 private constant DECIMALS = 8; // eight
     uint256 private constant SUPPLY_KEY = 16; // 4th bit (counting from 0) flipped, i.e. 10000 binary.
 
@@ -32,13 +32,11 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
     address immutable PNG;
 
-    bytes32 private constant DISTRIBUTOR_ROLE = keccak256("DISTRIBUTOR_ROLE");
-
     bool public initialSupplyTransferredOut;
 
     uint256 public distributionCount; // num of times distribute func was executed.
 
-    // daily amount distributed on each month. e.g., first 30 distributions will distribute 191666666666666 each, bar dust. for 230m total.
+    // daily amount distributed on each month. e.g., first 30 distributions will distribute 191666666666666 each, bar dust. ~230m total.
     int64[30] public vestingAmounts = [ int64(191666666666666), 107333333333333, 61333333333333, 40633333333333, 29900000000000, 28366666666666, 26833333333333, 25300000000000, 23766666666666, 22233333333333, 20700000000000, 19166666666666, 18016666666666, 16866666666666, 15716666666666, 14566666666666, 13416666666666, 12266666666666, 11116666666666, 9966666666666, 9200000000000, 8433333333335, 7666666666668, 6900000000000, 6133333333335, 5366666666668, 4600000000000, 3833333333335, 3066666666668, 2300000000000 ];
 
     event TokensVested(int64 amount);
@@ -56,7 +54,6 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
         // Assign roles.
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        _grantRole(DISTRIBUTOR_ROLE, admin);
 
         // Create Pangolin token. //
         ////////////////////////////
@@ -142,11 +139,11 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
         int64 vestingAmount = vestingAmounts[distributionCount++ / 30];
 
         uint256 tmpRecipientsLength = recipients.length;
-        uint256 allTransactors = tmpRecipientsLength + 1;
+        uint256 allTransactors = tmpRecipientsLength + 1; // incl. this address as sender of funds
 
         address[] memory accountIds = new address[](allTransactors);
         int64[] memory amounts = new int64[](allTransactors);
-        int64 actualVestingAmount;
+        int64 actualVestingAmount; // vesting amount excl. dust
 
         // Populate atomic swap properties.
         for (uint256 i; i < tmpRecipientsLength;) {
@@ -163,7 +160,7 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
         }
 
         accountIds[tmpRecipientsLength] = address(this);
-        amounts[tmpRecipientsLength] = -(actualVestingAmount);
+        amounts[tmpRecipientsLength] = -(actualVestingAmount); // negative to debit from this addr
 
         _mint(actualVestingAmount);
 
