@@ -19,10 +19,11 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
     Recipient[] public recipients;
 
-    uint32 private constant MAX_SUPPLY = 242_000_000 * uint32(10)**DECIMALS; // two-hundred-and-fourty-two million
+    uint32 private constant MAX_SUPPLY = 242_000_000 * uint32(10)**DECIMALS; // two-hundred-and-fourty- million
     uint32 private constant INITIAL_SUPPLY = 12_000_000 * uint32(10)**DECIMALS; // twelve million (airdrop supply)
     uint256 private constant DECIMALS = 8; // eight
     uint256 private constant SUPPLY_KEY = 16; // 4th bit (counting from 0) flipped, i.e. 10000 binary.
+    uint256 private constant STEPS_TO_SLASH = 30; // increment index from vestingAmounts array every 30 distributions
 
     uint256 private constant MAX_RECIPIENTS = 20;
     uint256 private constant VESTING_CLIFF = 1 days;
@@ -136,7 +137,7 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
     }
 
     function distribute() external daily whenNotPaused {
-        int64 vestingAmount = vestingAmounts[distributionCount++ / 30];
+        int64 vestingAmount = vestingAmounts[distributionCount++ / STEPS_TO_SLASH];
 
         uint256 tmpRecipientsLength = recipients.length;
         uint256 allTransactors = tmpRecipientsLength + 1; // incl. this address as sender of funds
