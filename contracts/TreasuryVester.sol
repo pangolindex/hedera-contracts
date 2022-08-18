@@ -19,9 +19,9 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
     Recipient[] public recipients;
 
+    uint32 private constant DECIMALS = 8; // eight
     uint32 private constant MAX_SUPPLY = 230_000_000 * uint32(10)**DECIMALS; // two-hundred-and-fourty- million
     uint32 private constant INITIAL_SUPPLY = 11_500_000 * uint32(10)**DECIMALS; // twelve million (airdrop supply)
-    uint256 private constant DECIMALS = 8; // eight
     uint256 private constant SUPPLY_KEY = 16; // 4th bit (counting from 0) flipped, i.e. 10000 binary.
     uint256 private constant STEPS_TO_SLASH = 30; // increment index from vestingAmounts array every 30 distributions
 
@@ -83,7 +83,7 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
         token.expiry = createAutoRenewExpiry(address(this), 90 days);
 
         // Create the token.
-        (int256 responseCode, address tokenId) = createFungibleToken(token, INITIAL_SUPPLY, DECIMALS);
+        (int256 responseCode, address tokenId) = createFungibleToken(token, INITIAL_SUPPLY, uint32(DECIMALS));
         require(responseCode == HederaResponseCodes.SUCCESS, "Token creation failed");
 
         // Set the immutable state variable for the distribution token.
