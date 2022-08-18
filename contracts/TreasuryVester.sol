@@ -19,8 +19,8 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
     Recipient[] public recipients;
 
-    uint32 private constant MAX_SUPPLY = 242_000_000 * uint32(10)**DECIMALS; // two-hundred-and-fourty- million
-    uint32 private constant INITIAL_SUPPLY = 12_000_000 * uint32(10)**DECIMALS; // twelve million (airdrop supply)
+    uint32 private constant MAX_SUPPLY = 230_000_000 * uint32(10)**DECIMALS; // two-hundred-and-fourty- million
+    uint32 private constant INITIAL_SUPPLY = 11_500_000 * uint32(10)**DECIMALS; // twelve million (airdrop supply)
     uint256 private constant DECIMALS = 8; // eight
     uint256 private constant SUPPLY_KEY = 16; // 4th bit (counting from 0) flipped, i.e. 10000 binary.
     uint256 private constant STEPS_TO_SLASH = 30; // increment index from vestingAmounts array every 30 distributions
@@ -37,8 +37,8 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
     uint256 public distributionCount; // num of times distribute func was executed.
 
-    // daily amount distributed on each month. e.g., first 30 distributions will distribute 191666666666666 each, bar dust. ~230m total.
-    int64[30] public vestingAmounts = [ int64(191666666666666), 107333333333333, 61333333333333, 40633333333333, 29900000000000, 28366666666666, 26833333333333, 25300000000000, 23766666666666, 22233333333333, 20700000000000, 19166666666666, 18016666666666, 16866666666666, 15716666666666, 14566666666666, 13416666666666, 12266666666666, 11116666666666, 9966666666666, 9200000000000, 8433333333335, 7666666666668, 6900000000000, 6133333333335, 5366666666668, 4600000000000, 3833333333335, 3066666666668, 2300000000000 ];
+    // daily amount distributed on each month. e.g., first 30 distributions will distribute 182083333333333 each, bar dust. ~218.5M total (max supply - airdrop).
+    int64[30] public vestingAmounts = [ int64(182083333333333), 101966666666666, 58266666666666, 38601666666666, 28405000000000, 26948333333333, 25491666666666, 24035000000000, 22578333333333, 21121666666666, 19665000000000, 18208333333333, 17115833333333, 16023333333333, 14930833333333, 13838333333333, 12745833333333, 11653333333333, 10560833333333, 9468333333333, 8740000000000, 8011666666666, 7283333333333, 6555000000000, 5826666666666, 5098333333333, 4370000000000, 3641666666666, 2913333333333, 2185000000000 ];
 
     event TokensVested(int64 amount);
     event RecipientsChanged(address[] accounts, int64[] allocations);
