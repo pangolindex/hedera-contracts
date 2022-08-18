@@ -16,10 +16,6 @@ HederaTokenService was integrated to [PangolinPair](./contracts/pangolin-core/Pa
 
 This is a new contract specifically for Hedera. It creates, mints, and distributes a Hedera native PNG token. It mints an initial supply to be later transferred to an airdrop contract. The remaining tokens are vested based on a hard-coded schedule. The owner first defines recipients and their allocations to receive from the vesting.
 
-### Out of Scope
-
-Pangolin periphery contracts and Pangolin library contract are not in scope. They have no or minimal change. HTS contracts are also not in scope, as they only had changes to some of the function names to prevent collision.
-
 ## Deployment Flow
 
 The contracts will be deployed to mainnet in the following order.
