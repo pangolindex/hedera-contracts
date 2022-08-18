@@ -10,8 +10,6 @@ The only changes made to existing widely-utilized wrapped AVAX contract was to c
 
 Contract versions were bumped to `0.6.12`. This required explicitly marking functions virtual or override. See commit e2138f5215f50769ccc447587d59ff78c9637eff for all changes.
 
-[PangolinFactory](./contracts/pangolin-core/PangolinFactory.sol) was modified mildly to reduce storage. See commit a953141976e90a5c30685375293db7384e400d6c for details.
-
 HederaTokenService was integrated to [PangolinPair](./contracts/pangolin-core/PangolinPair.sol). It will try to associate both reserve tokens, and if association fails, it will assume the token to be ERC20. This simple modification allows a pair to consist of two ERC20 tokens, two Hedera tokens, or one Hedera token and an ERC20 token. See commit 18d552a39e916c52c0606bf894f9cf88d114817a for details.
 
 ### [TreasuryVester](./contracts/TreasuryVester.sol)
@@ -31,14 +29,9 @@ The contracts will be deployed to mainnet in the following order.
 1. Run `npx hardhat run scripts/deploy-WrappedHedera.js`,
 2. Record the new contract ID, and add it to `WRAPPED_HEDERA` in `.env`.
 
-### Multisig
+### Multisig (TBD)
 
-1. Ensure `MY_PRIVATE_KEY`, `MY_ACCOUNT_ID` (Hedera address), and `ACCOUNT_IDS_FOR_MULTISIG` (comma-separated Hedera addresses) are defined in `.env`,
-2. Run `npx hardhat run scripts/create-Multisig.js`,
-3. Record the new contract ID,
-4. Set `MULTISIG_ACCOUNT_ID` in `.env` to the new contract ID.
-
-This is a native Hedera account. No need for smart contracts.
+Creating a native Hedera mutisig account requires signatures from threshold key holders. The script for this is not ready yet. Once the account is created, set `MULTISIGI_ACCOUNT_ID` in `.env` accordingly.
 
 ### Pangolin Factory
 
