@@ -7,9 +7,7 @@ import './PangolinPair.sol';
 contract PangolinFactory is IPangolinFactory {
     address public override feeTo;
     address public override feeToSetter;
-
-    mapping(address => mapping(address => address)) public override getPair;
-    address[] public override allPairs;
+    uint public override allPairsLength;
 
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
@@ -17,25 +15,34 @@ contract PangolinFactory is IPangolinFactory {
         feeToSetter = _feeToSetter;
     }
 
-    function allPairsLength() external view override returns (uint) {
-        return allPairs.length;
+    function getPair(address tokenA, address tokenB) public view override returns (address) {
+        (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
+        address pair = address(uint(keccak256(abi.encodePacked(
+            hex'ff',
+            address(this),
+            keccak256(abi.encodePacked(token0, token1)),
+            keccak256(type(PangolinPair).creationCode)
+        ))));
+        uint size;
+        assembly {
+            size := extcodesize(pair)
+        }
+        if (size > 0) return pair; else return address(0);
     }
 
     function createPair(address tokenA, address tokenB) external override returns (address pair) {
         require(tokenA != tokenB, 'Pangolin: IDENTICAL_ADDRESSES');
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
         require(token0 != address(0), 'Pangolin: ZERO_ADDRESS');
-        require(getPair[token0][token1] == address(0), 'Pangolin: PAIR_EXISTS'); // single check is sufficient
+        require(getPair(token0, token1) == address(0), 'Pangolin: PAIR_EXISTS'); // single check is sufficient
         bytes memory bytecode = type(PangolinPair).creationCode;
         bytes32 salt = keccak256(abi.encodePacked(token0, token1));
         assembly {
             pair := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
         IPangolinPair(pair).initialize(token0, token1);
-        getPair[token0][token1] = pair;
-        getPair[token1][token0] = pair; // populate mapping in the reverse direction
-        allPairs.push(pair);
-        emit PairCreated(token0, token1, pair, allPairs.length);
+        ++allPairsLength;
+        emit PairCreated(token0, token1, pair, allPairsLength);
     }
 
     function setFeeTo(address _feeTo) external override {

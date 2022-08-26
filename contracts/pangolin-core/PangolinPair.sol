@@ -88,7 +88,7 @@ contract PangolinPair is IPangolinPair, PangolinERC20, HederaTokenService {
 
             // Ensure contract exists for ERC20. Allowing non-contract addresses might be
             // problematic as contract addresses are sequential in Hedera.
-            uint256 size;
+            uint size;
             assembly {
                 size := extcodesize(token)
             }
