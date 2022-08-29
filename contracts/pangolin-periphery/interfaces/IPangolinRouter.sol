@@ -3,7 +3,8 @@ pragma solidity >=0.6.2;
 
 interface IPangolinRouter {
     function factory() external pure returns (address);
-    function WAVAX() external pure returns (address);
+    function wavaxContract() external pure returns (address);
+    function wavaxToken() external pure returns (address);
 
     function addLiquidity(
         address tokenA,
