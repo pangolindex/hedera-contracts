@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.6.12;
+pragma experimental ABIEncoderV2;
 
 import './interfaces/IPangolinPair.sol';
-import './PangolinERC20.sol';
 import './libraries/Math.sol';
+import './libraries/SafeMath.sol';
 import './libraries/UQ112x112.sol';
 import './interfaces/IERC20.sol';
 import './interfaces/IPangolinFactory.sol';
@@ -11,17 +12,23 @@ import './interfaces/IPangolinCallee.sol';
 
 import '../hts-precompile/HederaResponseCodes.sol';
 import '../hts-precompile/HederaTokenService.sol';
+import "../hts-precompile/ExpiryHelper.sol";
 
-contract PangolinPair is IPangolinPair, PangolinERC20, HederaTokenService {
+contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
     using SafeMath  for uint;
     using UQ112x112 for uint224;
 
+    uint private constant SUPPLY_KEY = 16; // 4th bit (counting from 0) flipped, i.e. 10000 binary.
+    uint private constant MAXIMUM_HEDERA_TOKEN_SUPPLY = 2**63 - 1;
     uint public constant override MINIMUM_LIQUIDITY = 10**3;
     bytes4 private constant SELECTOR = bytes4(keccak256(bytes('transfer(address,uint256)')));
 
-    address public override factory;
+    address public immutable override factory;
     address public override token0;
     address public override token1;
+
+    address public override pairToken;
+    address public override logicalBurnContract;
 
     uint112 private reserve0;           // uses single storage slot, accessible via getReserves
     uint112 private reserve1;           // uses single storage slot, accessible via getReserves
@@ -67,7 +74,7 @@ contract PangolinPair is IPangolinPair, PangolinERC20, HederaTokenService {
     }
 
     // called once by the factory at time of deployment
-    function initialize(address _token0, address _token1) external override {
+    function initialize(address _token0, address _token1, address _burnAddress) external override returns (address) {
         require(msg.sender == factory, 'Pangolin: FORBIDDEN'); // sufficient check
 
         _tryAssociating(_token0);
@@ -75,25 +82,61 @@ contract PangolinPair is IPangolinPair, PangolinERC20, HederaTokenService {
 
         token0 = _token0;
         token1 = _token1;
+
+        // Create pair token. //
+        ////////////////////////
+
+        // Define the key of this contract.
+        IHederaTokenService.KeyValue memory pairContractKey;
+        pairContractKey.contractId = address(this);
+
+        // Define a supply key which gives this contract minting and burning access.
+        IHederaTokenService.TokenKey memory supplyKey;
+        supplyKey.keyType = SUPPLY_KEY;
+        supplyKey.key = pairContractKey;
+
+        // Define the key types used in the token. Only supply key used.
+        IHederaTokenService.TokenKey[] memory keys = new IHederaTokenService.TokenKey[](1);
+        keys[0] = supplyKey;
+
+        // Define the token properties.
+        IHederaTokenService.HederaToken memory token;
+        token.name = "Pangolin Liquidity";
+        token.symbol = "PGL";
+        token.treasury = address(this); // also associates token?
+        token.tokenKeys = keys;
+        token.expiry = createAutoRenewExpiry(address(this), 90 days);
+
+        // Create the token, with zero initial supply, and zero decimals.
+        (int256 tokenCreateResponseCode, address tokenId) = createFungibleToken(token, 0, uint32(0));
+        require(tokenCreateResponseCode == HederaResponseCodes.SUCCESS, "Token creation failed");
+
+        // Set the immutable state variables for the pair token.
+        pairToken = tokenId;
+        logicalBurnContract = _burnAddress;
+
+        return tokenId;
     }
 
     function _tryAssociating(address token) private {
         // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
         int responseCode = associateToken(address(this), token);
+        require(responseCode == HederaResponseCodes.SUCCESS, 'Pangolin: INVALID_TOKEN');
+    }
 
-        // If association fails for native hedera token, the reserve token will be an ERC20.
-        if (responseCode != HederaResponseCodes.SUCCESS) {
-            // Only acceptable failed response is that the address is not Hedera token precompile.
-            require(responseCode == HederaResponseCodes.INVALID_TOKEN_ID, 'Pangolin: INVALID_TOKEN_ID');
+    function _mint(address to, uint amount) private {
+        assert(amount <= MAXIMUM_HEDERA_TOKEN_SUPPLY);
+        (int256 mintResponseCode,,) = mintToken(pairToken, uint64(amount), new bytes[](0));
+        require(mintResponseCode == HederaResponseCodes.SUCCESS, "Mint failed");
+        int256 transferResponseCode = transferToken(pairToken, address(this), to, int64(uint64(amount)));
+        require(transferResponseCode == HederaResponseCodes.SUCCESS, "Transfer failed");
+    }
 
-            // Ensure contract exists for ERC20. Allowing non-contract addresses might be
-            // problematic as contract addresses are sequential in Hedera.
-            uint size;
-            assembly {
-                size := extcodesize(token)
-            }
-            require(size > 0, 'Pangolin: EMPTY_ADDRESS');
-        }
+    function _burn(address from, uint amount) private {
+        assert(from == address(this));
+        assert(amount <= MAXIMUM_HEDERA_TOKEN_SUPPLY);
+        (int256 burnResponseCode,) = burnToken(pairToken, uint64(amount), new int64[](0));
+        require(burnResponseCode == HederaResponseCodes.SUCCESS, "Burn failed");
     }
 
     // update reserves and, on the first call per block, price accumulators
@@ -122,7 +165,7 @@ contract PangolinPair is IPangolinPair, PangolinERC20, HederaTokenService {
                 uint rootK = Math.sqrt(uint(_reserve0).mul(_reserve1));
                 uint rootKLast = Math.sqrt(_kLast);
                 if (rootK > rootKLast) {
-                    uint numerator = totalSupply.mul(rootK.sub(rootKLast));
+                    uint numerator = IERC20(pairToken).totalSupply().mul(rootK.sub(rootKLast));
                     uint denominator = rootK.mul(5).add(rootKLast);
                     uint liquidity = numerator / denominator;
                     if (liquidity > 0) _mint(feeTo, liquidity);
@@ -142,10 +185,10 @@ contract PangolinPair is IPangolinPair, PangolinERC20, HederaTokenService {
         uint amount1 = balance1.sub(_reserve1);
 
         bool feeOn = _mintFee(_reserve0, _reserve1);
-        uint _totalSupply = totalSupply; // gas savings, must be defined here since totalSupply can update in _mintFee
+        uint _totalSupply = IERC20(pairToken).totalSupply(); // gas savings, must be defined here since totalSupply can update in _mintFee
         if (_totalSupply == 0) {
             liquidity = Math.sqrt(amount0.mul(amount1)).sub(MINIMUM_LIQUIDITY);
-           _mint(address(0), MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
+           _mint(logicalBurnContract, MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
         } else {
             liquidity = Math.min(amount0.mul(_totalSupply) / _reserve0, amount1.mul(_totalSupply) / _reserve1);
         }
@@ -164,10 +207,10 @@ contract PangolinPair is IPangolinPair, PangolinERC20, HederaTokenService {
         address _token1 = token1;                                // gas savings
         uint balance0 = IERC20(_token0).balanceOf(address(this));
         uint balance1 = IERC20(_token1).balanceOf(address(this));
-        uint liquidity = balanceOf[address(this)];
+        uint liquidity = IERC20(pairToken).balanceOf(address(this));
 
         bool feeOn = _mintFee(_reserve0, _reserve1);
-        uint _totalSupply = totalSupply; // gas savings, must be defined here since totalSupply can update in _mintFee
+        uint _totalSupply = IERC20(pairToken).totalSupply(); // gas savings, must be defined here since totalSupply can update in _mintFee
         amount0 = liquidity.mul(balance0) / _totalSupply; // using balances ensures pro-rata distribution
         amount1 = liquidity.mul(balance1) / _totalSupply; // using balances ensures pro-rata distribution
         require(amount0 > 0 && amount1 > 0, 'Pangolin: INSUFFICIENT_LIQUIDITY_BURNED');

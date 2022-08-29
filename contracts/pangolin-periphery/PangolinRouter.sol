@@ -2,7 +2,6 @@
 pragma solidity =0.6.6;
 
 import '../pangolin-core/interfaces/IPangolinFactory.sol';
-import '../pangolin-core/interfaces/IPangolinERC20.sol';
 import '../pangolin-lib/libraries/TransferHelper.sol';
 
 import './interfaces/IPangolinRouter.sol';
@@ -117,7 +116,7 @@ contract PangolinRouter is IPangolinRouter {
         uint deadline
     ) public virtual override ensure(deadline) returns (uint amountA, uint amountB) {
         address pair = PangolinLibrary.pairFor(factory, tokenA, tokenB);
-        IPangolinERC20(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
+        IERC20(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
         (uint amount0, uint amount1) = IPangolinPair(pair).burn(to);
         (address token0,) = PangolinLibrary.sortTokens(tokenA, tokenB);
         (amountA, amountB) = tokenA == token0 ? (amount0, amount1) : (amount1, amount0);
@@ -145,35 +144,6 @@ contract PangolinRouter is IPangolinRouter {
         IWAVAX(WAVAX).withdraw(amountAVAX);
         TransferHelper.safeTransferAVAX(to, amountAVAX);
     }
-    function removeLiquidityWithPermit(
-        address tokenA,
-        address tokenB,
-        uint liquidity,
-        uint amountAMin,
-        uint amountBMin,
-        address to,
-        uint deadline,
-        bool approveMax, uint8 v, bytes32 r, bytes32 s
-    ) external virtual override returns (uint amountA, uint amountB) {
-        address pair = PangolinLibrary.pairFor(factory, tokenA, tokenB);
-        uint value = approveMax ? uint(-1) : liquidity;
-        IPangolinERC20(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
-        (amountA, amountB) = removeLiquidity(tokenA, tokenB, liquidity, amountAMin, amountBMin, to, deadline);
-    }
-    function removeLiquidityAVAXWithPermit(
-        address token,
-        uint liquidity,
-        uint amountTokenMin,
-        uint amountAVAXMin,
-        address to,
-        uint deadline,
-        bool approveMax, uint8 v, bytes32 r, bytes32 s
-    ) external virtual override returns (uint amountToken, uint amountAVAX) {
-        address pair = PangolinLibrary.pairFor(factory, token, WAVAX);
-        uint value = approveMax ? uint(-1) : liquidity;
-        IPangolinERC20(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
-        (amountToken, amountAVAX) = removeLiquidityAVAX(token, liquidity, amountTokenMin, amountAVAXMin, to, deadline);
-    }
 
     // **** REMOVE LIQUIDITY (supporting fee-on-transfer tokens) ****
     function removeLiquidityAVAXSupportingFeeOnTransferTokens(
@@ -196,22 +166,6 @@ contract PangolinRouter is IPangolinRouter {
         TransferHelper.safeTransfer(token, to, IERC20(token).balanceOf(address(this)));
         IWAVAX(WAVAX).withdraw(amountAVAX);
         TransferHelper.safeTransferAVAX(to, amountAVAX);
-    }
-    function removeLiquidityAVAXWithPermitSupportingFeeOnTransferTokens(
-        address token,
-        uint liquidity,
-        uint amountTokenMin,
-        uint amountAVAXMin,
-        address to,
-        uint deadline,
-        bool approveMax, uint8 v, bytes32 r, bytes32 s
-    ) external virtual override returns (uint amountAVAX) {
-        address pair = PangolinLibrary.pairFor(factory, token, WAVAX);
-        uint value = approveMax ? uint(-1) : liquidity;
-        IPangolinERC20(pair).permit(msg.sender, address(this), value, deadline, v, r, s);
-        amountAVAX = removeLiquidityAVAXSupportingFeeOnTransferTokens(
-            token, liquidity, amountTokenMin, amountAVAXMin, to, deadline
-        );
     }
 
     // **** SWAP ****

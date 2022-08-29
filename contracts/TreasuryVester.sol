@@ -173,8 +173,7 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
     function _mint(int64 amount) private {
         assert(amount > 0);
-        bytes[] memory serialNumbers = new bytes[](0);
-        (int256 responseCode,,) = mintToken(PNG, uint64(amount), serialNumbers);
+        (int256 responseCode,,) = mintToken(PNG, uint64(amount), new bytes[](0));
         require(responseCode == HederaResponseCodes.SUCCESS, "Mint failed");
     }
 }
