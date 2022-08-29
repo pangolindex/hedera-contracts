@@ -1,79 +1,72 @@
-// Copyright (C) 2015, 2016, 2017 Dapphub
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.9;
 
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
+import './hts-precompile/HederaResponseCodes.sol';
+import './hts-precompile/HederaTokenService.sol';
+import "./hts-precompile/ExpiryHelper.sol";
 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
+contract WHBAR is HederaTokenService, ExpiryHelper {
+    string private constant NAME = "Wrapped Hedera";
+    string private constant SYMBOL = "WHBAR";
+    uint8 private constant DECIMALS = 8;
+    uint private constant SUPPLY_KEY = 16;
+    uint private constant MAXIMUM_HEDERA_TOKEN_SUPPLY = 2**63 - 1;
 
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    address public immutable TOKEN_ID;
 
-// Contract name, token name, and token symbol modified by Ava Labs 2020
+    event Deposit(address indexed dst, uint wad);
+    event Withdrawal(address indexed src, uint wad);
 
-pragma solidity >=0.4.22 <0.6;
+    constructor() payable {
+        // Define the key of this contract.
+        IHederaTokenService.KeyValue memory key;
+        key.contractId = address(this);
 
-contract WHBAR {
-    string public name     = "Wrapped Hedera";
-    string public symbol   = "WHBAR";
-    uint8  public decimals = 8;
+        // Define a supply key which gives this contract minting and burning access.
+        IHederaTokenService.TokenKey memory supplyKey;
+        supplyKey.keyType = SUPPLY_KEY;
+        supplyKey.key = key;
 
-    event  Approval(address indexed src, address indexed guy, uint wad);
-    event  Transfer(address indexed src, address indexed dst, uint wad);
-    event  Deposit(address indexed dst, uint wad);
-    event  Withdrawal(address indexed src, uint wad);
+        // Define the key types used in the token. Only supply key used.
+        IHederaTokenService.TokenKey[] memory keys = new IHederaTokenService.TokenKey[](1);
+        keys[0] = supplyKey;
 
-    mapping (address => uint)                       public  balanceOf;
-    mapping (address => mapping (address => uint))  public  allowance;
+        // Define the token properties.
+        IHederaTokenService.HederaToken memory token;
+        token.name = NAME;
+        token.symbol = SYMBOL;
+        token.treasury = address(this); // also associates token.
+        token.tokenKeys = keys;
+        token.expiry = createAutoRenewExpiry(address(this), 90 days);
 
-    function() external payable {
+        // Create the token.
+        (int256 responseCode, address tokenId) = createFungibleToken(token, 0, uint32(DECIMALS));
+        require(responseCode == HederaResponseCodes.SUCCESS, "Token creation failed");
+
+        // Set the immutable state variable for the distribution token.
+        TOKEN_ID = tokenId;
+    }
+
+    receive() external payable {
         deposit();
     }
+
     function deposit() public payable {
-        balanceOf[msg.sender] += msg.value;
+        assert(msg.value <= MAXIMUM_HEDERA_TOKEN_SUPPLY);
+        (int256 mintResponseCode,,) = mintToken(TOKEN_ID, uint64(msg.value), new bytes[](0));
+        require(mintResponseCode == HederaResponseCodes.SUCCESS, "Mint failed");
+        int256 transferResponseCode = transferToken(TOKEN_ID, address(this), msg.sender, int64(uint64(msg.value)));
+        require(transferResponseCode == HederaResponseCodes.SUCCESS, "Transfer failed");
         emit Deposit(msg.sender, msg.value);
     }
-    function withdraw(uint wad) public {
-        require(balanceOf[msg.sender] >= wad);
-        balanceOf[msg.sender] -= wad;
-        msg.sender.transfer(wad);
+
+    function withdraw(uint wad) external {
+        assert(wad <= MAXIMUM_HEDERA_TOKEN_SUPPLY);
+        int256 transferResponseCode = transferToken(TOKEN_ID, msg.sender, address(this), int64(uint64(wad)));
+        require(transferResponseCode == HederaResponseCodes.SUCCESS, "Transfer failed");
+        (int256 burnResponseCode,) = burnToken(TOKEN_ID, uint64(wad), new int64[](0));
+        require(burnResponseCode == HederaResponseCodes.SUCCESS, "Burn failed");
+        payable(msg.sender).transfer(wad);
         emit Withdrawal(msg.sender, wad);
-    }
-
-    function totalSupply() public view returns (uint) {
-        return address(this).balance;
-    }
-
-    function approve(address guy, uint wad) public returns (bool) {
-        allowance[msg.sender][guy] = wad;
-        emit Approval(msg.sender, guy, wad);
-        return true;
-    }
-
-    function transfer(address dst, uint wad) public returns (bool) {
-        return transferFrom(msg.sender, dst, wad);
-    }
-
-    function transferFrom(address src, address dst, uint wad)
-        public
-        returns (bool)
-    {
-        require(balanceOf[src] >= wad);
-
-        if (src != msg.sender && allowance[src][msg.sender] != uint(-1)) {
-            require(allowance[src][msg.sender] >= wad);
-            allowance[src][msg.sender] -= wad;
-        }
-
-        balanceOf[src] -= wad;
-        balanceOf[dst] += wad;
-
-        emit Transfer(src, dst, wad);
-
-        return true;
     }
 }

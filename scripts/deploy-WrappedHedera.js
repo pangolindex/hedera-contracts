@@ -1,4 +1,4 @@
-const { Client, AccountBalanceQuery, ContractFunctionParameters, ContractCreateFlow, AccountId } = require("@hashgraph/sdk");
+const { Client, AccountBalanceQuery, Hbar, ContractFunctionParameters, ContractExecuteTransaction, ContractCreateFlow, AccountId } = require("@hashgraph/sdk");
 const { ethers } = require("hardhat");
 
 require("dotenv").config();
@@ -33,22 +33,47 @@ async function main() {
     // Get the contract bytecode from Hardhat.
     const factory = await ethers.getContractFactory(contractName);
     const bytecode = factory.bytecode;
-
     // Create the deploy transaction.
-    const contractCreate = new ContractCreateFlow()
-        .setGas(200_000)
+    const contractCreateTransaction = new ContractCreateFlow()
+        .setGas(2_000_000)
+        .setInitialBalance(new Hbar(40))
         .setBytecode(bytecode);
-
     // Sign the transaction with the client operator key and submit to a Hedera network.
-    const txResponse = contractCreate.execute(client);
-
+    const contractCreateTxResponse = contractCreateTransaction.execute(client);
     // Get the receipt of the transaction.
-    const receipt = (await txResponse).getReceipt(client);
-
+    const contractCreateTxReceipt = (await contractCreateTxResponse).getReceipt(client);
     // Get the new contract ID.
-    const newContractId = (await receipt).contractId;
+    const whbarContractId = (await contractCreateTxReceipt).contractId;
+    console.log("The new " + contractName + " contract ID is " + whbarContractId + ". Make a record of it!");
 
-    console.log("The new " + contractName + " contract ID is " + newContractId + ". Make a record of it!");
+    //Create the transaction for deposit
+    const depositTransaction = new ContractExecuteTransaction()
+        .setContractId(whbarContractId)
+        .setGas(300_000)
+        .setFunction("deposit")
+        .setPayableAmount(1)
+    //Sign with the client operator private key to pay for the transaction and submit the query to a Hedera network
+    const depositTxResponse = await depositTransaction.execute(client);
+    //Request the receipt of the transaction
+    const depositTxReceipt = await depositTxResponse.getReceipt(client);
+    //Get the transaction consensus status
+    const depositTxStatus = depositTxReceipt.status;
+    console.log("The deposit transaction consensus status is " +depositTxStatus);
+
+    //Create the transaction for withdraw
+    const withdrawTransaction = new ContractExecuteTransaction()
+        .setContractId(whbarContractId)
+        .setGas(300_000)
+        .setFunction("withdraw", new ContractFunctionParameters()
+            .addUint256(100000000)
+        )
+    //Sign with the client operator private key to pay for the transaction and submit the query to a Hedera network
+    const withdrawTxResponse = await withdrawTransaction.execute(client);
+    //Request the receipt of the transaction
+    const withdrawTxReceipt = await withdrawTxResponse.getReceipt(client);
+    //Get the transaction consensus status
+    const withdrawTxStatus = withdrawTxReceipt.status;
+    console.log("The withdraw transaction consensus status is " +withdrawTxStatus);
 
     // Get remaining account balance.
     const accountBalance = await new AccountBalanceQuery()
