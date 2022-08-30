@@ -15,7 +15,7 @@ interface IPangolinRouter {
         uint amountBMin,
         address to,
         uint deadline
-    ) external returns (uint amountA, uint amountB, uint liquidity);
+    ) external payable returns (uint amountA, uint amountB, uint liquidity);
     function addLiquidityAVAX(
         address token,
         uint amountTokenDesired,

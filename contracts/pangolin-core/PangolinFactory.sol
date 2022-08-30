@@ -47,7 +47,7 @@ contract PangolinFactory is IPangolinFactory {
         if (size > 0) return burnContract; else return address(0);
     }
 
-    function createPair(address tokenA, address tokenB) external override returns (address pair) {
+    function createPair(address tokenA, address tokenB) external payable override returns (address pair) {
         require(tokenA != tokenB, 'Pangolin: IDENTICAL_ADDRESSES');
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
         require(token0 != address(0), 'Pangolin: ZERO_ADDRESS');
@@ -60,9 +60,8 @@ contract PangolinFactory is IPangolinFactory {
         address burnContract;
         if (allPairsLength % MAX_ASSOCIATIONS == 0) {
             bytes memory burnContractBytecode = type(LogicalBurn).creationCode;
-            bytes32 burnContractSalt = bytes32(burnContractIndex);
             assembly {
-                burnContract := create2(0, add(burnContractBytecode, 32), mload(burnContractBytecode), burnContractSalt)
+                burnContract := create2(0, add(burnContractBytecode, 32), mload(burnContractBytecode), burnContractIndex)
             }
             emit BurnContractCreated(burnContract, burnContractIndex);
         } else {
@@ -75,8 +74,8 @@ contract PangolinFactory is IPangolinFactory {
         assembly {
             pair := create2(0, add(pairBytecode, 32), mload(pairBytecode), pairSalt)
         }
-        IPangolinPair(pair).initialize(token0, token1, burnContract);
-        ILogicalBurn(burnContract).associate(pair); // Allow burn contract to hold the pair token.
+        address pairToken = IPangolinPair(pair).initialize{ value: msg.value }(token0, token1, burnContract);
+        ILogicalBurn(burnContract).associate(pairToken); // Allow burn contract to hold the pair token.
         emit PairCreated(token0, token1, pair, allPairsLength++);
     }
 

@@ -12,7 +12,7 @@ interface IPangolinFactory {
     function getBurnContract(uint index) external view returns (address);
     function allPairsLength() external view returns (uint);
 
-    function createPair(address tokenA, address tokenB) external returns (address pair);
+    function createPair(address tokenA, address tokenB) external payable returns (address pair);
 
     function setFeeTo(address) external;
     function setFeeToSetter(address) external;

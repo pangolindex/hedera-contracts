@@ -31,5 +31,5 @@ interface IPangolinPair {
     function skim(address to) external;
     function sync() external;
 
-    function initialize(address, address, address) external returns (address);
+    function initialize(address, address, address) external payable returns (address);
 }

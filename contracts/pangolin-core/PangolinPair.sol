@@ -74,7 +74,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
     }
 
     // called once by the factory at time of deployment
-    function initialize(address _token0, address _token1, address _burnAddress) external override returns (address) {
+    function initialize(address _token0, address _token1, address _burnAddress) external payable override returns (address) {
         require(msg.sender == factory, 'Pangolin: FORBIDDEN'); // sufficient check
 
         _tryAssociating(_token0);
