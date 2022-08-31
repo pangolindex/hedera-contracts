@@ -41,11 +41,6 @@ contract PangolinRouter is IPangolinRouter {
         uint amountAMin,
         uint amountBMin
     ) internal virtual returns (uint amountA, uint amountB) {
-        // create the pair if it doesn't exist yet
-        address pair = IPangolinFactory(factory).getPair(tokenA, tokenB);
-        if (pair == address(0)) {
-            IPangolinFactory(factory).createPair{ value: msg.value }(tokenA, tokenB);
-        }
         (uint reserveA, uint reserveB) = PangolinLibrary.getReserves(factory, tokenA, tokenB);
         if (reserveA == 0 && reserveB == 0) {
             (amountA, amountB) = (amountADesired, amountBDesired);
@@ -71,7 +66,7 @@ contract PangolinRouter is IPangolinRouter {
         uint amountBMin,
         address to,
         uint deadline
-    ) external payable virtual override ensure(deadline) returns (uint amountA, uint amountB, uint liquidity) {
+    ) external virtual override ensure(deadline) returns (uint amountA, uint amountB, uint liquidity) {
         (amountA, amountB) = _addLiquidity(tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin);
         address pair = PangolinLibrary.pairFor(factory, tokenA, tokenB);
         TransferHelper.safeTransferFrom(tokenA, msg.sender, pair, amountA);
