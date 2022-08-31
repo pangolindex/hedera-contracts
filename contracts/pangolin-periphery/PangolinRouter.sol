@@ -42,12 +42,8 @@ contract PangolinRouter is IPangolinRouter {
         uint amountBMin
     ) internal virtual returns (uint amountA, uint amountB) {
         // create the pair if it doesn't exist yet
-        address pair = PangolinLibrary.pairFor(factory, tokenA, tokenB);
-        uint size;
-        assembly {
-            size := extcodesize(pair)
-        }
-        if (size == 0) {
+        address pair = IPangolinFactory(factory).getPair(tokenA, tokenB);
+        if (pair == address(0)) {
             IPangolinFactory(factory).createPair{ value: msg.value }(tokenA, tokenB);
         }
         (uint reserveA, uint reserveB) = PangolinLibrary.getReserves(factory, tokenA, tokenB);

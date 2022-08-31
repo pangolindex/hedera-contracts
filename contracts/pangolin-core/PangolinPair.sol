@@ -77,8 +77,11 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
     function initialize(address _token0, address _token1, address _burnAddress) external payable override returns (address) {
         require(msg.sender == factory, 'Pangolin: FORBIDDEN'); // sufficient check
 
-        _tryAssociating(_token0);
-        _tryAssociating(_token1);
+        address[] memory tokens = new address[](2);
+        tokens[0] = _token0;
+        tokens[1] = _token1;
+        int associateResponseCode = associateTokens(address(this), tokens);
+        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Pangolin: INVALID_TOKEN');
 
         token0 = _token0;
         token1 = _token1;
@@ -116,12 +119,6 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
         logicalBurnContract = _burnAddress;
 
         return tokenId;
-    }
-
-    function _tryAssociating(address token) private {
-        // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
-        int responseCode = associateToken(address(this), token);
-        require(responseCode == HederaResponseCodes.SUCCESS, 'Pangolin: INVALID_TOKEN');
     }
 
     function _mint(address to, uint amount) private {

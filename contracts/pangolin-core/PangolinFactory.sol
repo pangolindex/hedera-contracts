@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.6.12;
 
+import './interfaces/IContractSizeChecker.sol';
 import './interfaces/IPangolinFactory.sol';
 import './PangolinPair.sol';
 import './LogicalBurn.sol';
@@ -10,12 +11,23 @@ contract PangolinFactory is IPangolinFactory {
     address public override feeToSetter;
     uint public override allPairsLength;
     uint private constant MAX_ASSOCIATIONS = 1000;
+    address private immutable CONTRACT_SIZE_CHECKER;
 
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
     event BurnContractCreated(address indexed logicalBurnAddress, uint indexed index);
 
-    constructor(address _feeToSetter) public {
+    constructor(address _feeToSetter, address _contractSizeChecker) public {
         feeToSetter = _feeToSetter;
+        CONTRACT_SIZE_CHECKER = _contractSizeChecker;
+    }
+
+    // We have to use an external contract for this because in Hedera even low-level
+    // calls made to non-contracts revert.
+    function _contractExists(address contractAddress) private view returns (bool) {
+        (bool success, bytes memory returndata) = CONTRACT_SIZE_CHECKER.staticcall{ gas: 100000 }(
+            abi.encodeWithSelector(IContractSizeChecker.checkCodeSize.selector, contractAddress)
+        );
+        return (success && returndata.length > 0 && abi.decode(returndata, (uint256)) > 0);
     }
 
     function getPair(address tokenA, address tokenB) public view override returns (address) {
@@ -26,25 +38,27 @@ contract PangolinFactory is IPangolinFactory {
             keccak256(abi.encodePacked(token0, token1)),
             keccak256(type(PangolinPair).creationCode)
         ))));
-        uint size;
-        assembly {
-            size := extcodesize(pair)
-        }
-        if (size > 0) return pair; else return address(0);
+        return _contractExists(pair) ? pair : address(0);
     }
 
     function getBurnContract(uint index) public view override returns (address) {
-        address burnContract = address(uint(keccak256(abi.encodePacked(
+        uint length = allPairsLength;
+        if (length == 0) {
+            return address(0);
+        } else {
+            return ((length - 1) / MAX_ASSOCIATIONS >= index)
+                ? _getBurnContract(index)
+                : address(0);
+        }
+    }
+
+    function _getBurnContract(uint index) private view returns (address) {
+        return address(uint(keccak256(abi.encodePacked(
             hex'ff',
             address(this),
             index,
             keccak256(type(LogicalBurn).creationCode)
         ))));
-        uint size;
-        assembly {
-            size := extcodesize(burnContract)
-        }
-        if (size > 0) return burnContract; else return address(0);
     }
 
     function createPair(address tokenA, address tokenB) external payable override returns (address pair) {
