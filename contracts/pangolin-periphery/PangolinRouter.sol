@@ -14,7 +14,7 @@ contract PangolinRouter is IPangolinRouter {
     using SafeMath for uint;
 
     address public immutable override factory;
-    address public immutable override wavaxContract;
+    IWAVAX public immutable override wavaxContract;
     address public immutable override wavaxToken;
 
     modifier ensure(uint deadline) {
@@ -24,7 +24,7 @@ contract PangolinRouter is IPangolinRouter {
 
     constructor(address _factory, address _wavaxContract) public {
         factory = _factory;
-        wavaxContract = _wavaxContract;
+        wavaxContract = IWAVAX(_wavaxContract);
         wavaxToken = address(uint160(_wavaxContract) + 1);
     }
 
@@ -91,7 +91,7 @@ contract PangolinRouter is IPangolinRouter {
         );
         address pair = PangolinLibrary.pairFor(factory, token, wavaxToken);
         TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);
-        IWAVAX(wavaxContract).deposit{value: amountAVAX}();
+        wavaxContract.deposit{value: amountAVAX}();
         TransferHelper.safeTransfer(wavaxToken, pair, amountAVAX);
         liquidity = IPangolinPair(pair).mint(to);
         // refund dust AVAX, if any
@@ -134,7 +134,7 @@ contract PangolinRouter is IPangolinRouter {
             deadline
         );
         TransferHelper.safeTransfer(token, to, amountToken);
-        IWAVAX(wavaxContract).withdraw(amountAVAX);
+        wavaxContract.withdraw(amountAVAX);
         TransferHelper.safeTransferAVAX(to, amountAVAX);
     }
 
@@ -157,7 +157,7 @@ contract PangolinRouter is IPangolinRouter {
             deadline
         );
         TransferHelper.safeTransfer(token, to, IERC20(token).balanceOf(address(this)));
-        IWAVAX(wavaxContract).withdraw(amountAVAX);
+        wavaxContract.withdraw(amountAVAX);
         TransferHelper.safeTransferAVAX(to, amountAVAX);
     }
 
@@ -214,7 +214,7 @@ contract PangolinRouter is IPangolinRouter {
         require(path[0] == wavaxToken, 'PangolinRouter: INVALID_PATH');
         amounts = PangolinLibrary.getAmountsOut(factory, msg.value, path);
         require(amounts[amounts.length - 1] >= amountOutMin, 'PangolinRouter: INSUFFICIENT_OUTPUT_AMOUNT');
-        IWAVAX(wavaxContract).deposit{value: amounts[0]}();
+        wavaxContract.deposit{value: amounts[0]}();
         TransferHelper.safeTransfer(wavaxToken, PangolinLibrary.pairFor(factory, path[0], path[1]), amounts[0]);
         _swap(amounts, path, to);
     }
@@ -232,7 +232,7 @@ contract PangolinRouter is IPangolinRouter {
             path[0], msg.sender, PangolinLibrary.pairFor(factory, path[0], path[1]), amounts[0]
         );
         _swap(amounts, path, address(this));
-        IWAVAX(wavaxContract).withdraw(amounts[amounts.length - 1]);
+        wavaxContract.withdraw(amounts[amounts.length - 1]);
         TransferHelper.safeTransferAVAX(to, amounts[amounts.length - 1]);
     }
     function swapExactTokensForAVAX(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline)
@@ -249,7 +249,7 @@ contract PangolinRouter is IPangolinRouter {
             path[0], msg.sender, PangolinLibrary.pairFor(factory, path[0], path[1]), amounts[0]
         );
         _swap(amounts, path, address(this));
-        IWAVAX(wavaxContract).withdraw(amounts[amounts.length - 1]);
+        wavaxContract.withdraw(amounts[amounts.length - 1]);
         TransferHelper.safeTransferAVAX(to, amounts[amounts.length - 1]);
     }
     function swapAVAXForExactTokens(uint amountOut, address[] calldata path, address to, uint deadline)
@@ -263,7 +263,7 @@ contract PangolinRouter is IPangolinRouter {
         require(path[0] == wavaxToken, 'PangolinRouter: INVALID_PATH');
         amounts = PangolinLibrary.getAmountsIn(factory, amountOut, path);
         require(amounts[0] <= msg.value, 'PangolinRouter: EXCESSIVE_INPUT_AMOUNT');
-        IWAVAX(wavaxContract).deposit{value: amounts[0]}();
+        wavaxContract.deposit{value: amounts[0]}();
         TransferHelper.safeTransfer(wavaxToken, PangolinLibrary.pairFor(factory, path[0], path[1]), amounts[0]);
         _swap(amounts, path, to);
         // refund dust AVAX, if any
@@ -321,7 +321,7 @@ contract PangolinRouter is IPangolinRouter {
     {
         require(path[0] == wavaxToken, 'PangolinRouter: INVALID_PATH');
         uint amountIn = msg.value;
-        IWAVAX(wavaxContract).deposit{value: amountIn}();
+        wavaxContract.deposit{value: amountIn}();
         TransferHelper.safeTransfer(wavaxToken, PangolinLibrary.pairFor(factory, path[0], path[1]), amountIn);
         uint balanceBefore = IERC20(path[path.length - 1]).balanceOf(to);
         _swapSupportingFeeOnTransferTokens(path, to);
@@ -349,7 +349,7 @@ contract PangolinRouter is IPangolinRouter {
         _swapSupportingFeeOnTransferTokens(path, address(this));
         uint amountOut = IERC20(wavaxToken).balanceOf(address(this));
         require(amountOut >= amountOutMin, 'PangolinRouter: INSUFFICIENT_OUTPUT_AMOUNT');
-        IWAVAX(wavaxContract).withdraw(amountOut);
+        wavaxContract.withdraw(amountOut);
         TransferHelper.safeTransferAVAX(to, amountOut);
     }
 
