@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.2;
 
+import './IWAVAX.sol';
+
 interface IPangolinRouter {
     function factory() external pure returns (address);
-    function wavaxContract() external pure returns (address);
+    function wavaxContract() external pure returns (IWAVAX);
     function wavaxToken() external pure returns (address);
 
     function addLiquidity(

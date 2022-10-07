@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.6.12;
+pragma experimental ABIEncoderV2;
 
 import '../hts-precompile/HederaResponseCodes.sol';
 import '../hts-precompile/HederaTokenService.sol';

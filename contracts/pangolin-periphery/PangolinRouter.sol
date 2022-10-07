@@ -29,7 +29,7 @@ contract PangolinRouter is IPangolinRouter {
     }
 
     receive() external payable {
-        assert(msg.sender == wavaxContract); // only accept AVAX via fallback from the WAVAX contract
+        assert(msg.sender == address(wavaxContract)); // only accept AVAX via fallback from the WAVAX contract
     }
 
     // **** ADD LIQUIDITY ****
@@ -40,7 +40,7 @@ contract PangolinRouter is IPangolinRouter {
         uint amountBDesired,
         uint amountAMin,
         uint amountBMin
-    ) internal virtual returns (uint amountA, uint amountB) {
+    ) internal virtual view returns (uint amountA, uint amountB) {
         (uint reserveA, uint reserveB) = PangolinLibrary.getReserves(factory, tokenA, tokenB);
         if (reserveA == 0 && reserveB == 0) {
             (amountA, amountB) = (amountADesired, amountBDesired);

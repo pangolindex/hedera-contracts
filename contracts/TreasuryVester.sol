@@ -20,8 +20,8 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
     Recipient[] public recipients;
 
     uint32 private constant DECIMALS = 8; // eight
-    uint256 private constant MAX_SUPPLY = 230_000_000 * 10**DECIMALS; // two-hundred-and-thirty million
-    uint256 private constant INITIAL_SUPPLY = 11_500_000 * 10**DECIMALS; // eleven million and five-hundred thousand (airdrop supply)
+    int64 private constant MAX_SUPPLY = int64(230_000_000) * int64(uint64(10**DECIMALS)); // two-hundred-and-thirty million
+    uint64 private constant INITIAL_SUPPLY = uint64(11_500_000) * uint64(10**DECIMALS); // eleven million and five-hundred thousand (airdrop supply)
     uint256 private constant SUPPLY_KEY = 16; // 4th bit (counting from 0) flipped, i.e. 10000 binary.
     uint256 private constant STEPS_TO_SLASH = 30; // increment index from vestingAmounts array every 30 distributions
 
@@ -76,10 +76,10 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
         IHederaTokenService.HederaToken memory token;
         token.name = "Pangolin Hedera";
         token.symbol = "PBAR";
-        token.treasury = address(this); // also associates token?
+        token.treasury = address(this);
         token.tokenKeys = keys;
-        //token.tokenSupplyType = true; // Finite.
-        //token.maxSupply = MAX_SUPPLY; // IHederaTokenService expects this value to fit uint32?!
+        token.tokenSupplyType = true; // Finite.
+        token.maxSupply = MAX_SUPPLY;
         token.expiry = createAutoRenewExpiry(address(this), 90 days);
 
         // Create the token.
