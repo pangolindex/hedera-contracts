@@ -75,7 +75,8 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
         // Define the token properties.
         IHederaTokenService.HederaToken memory token;
         token.name = "Pangolin Hedera";
-        token.symbol = "PBAR";
+        token.symbol = "PHD";
+        token.memo = "https://static.pangolin.exchange/pangolin-hedera-metadata.json";
         token.treasury = address(this);
         token.tokenKeys = keys;
         token.tokenSupplyType = true; // Finite.
