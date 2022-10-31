@@ -25,39 +25,31 @@ async function main() {
      * DEPLOY PANGOLIN FACTORY *
      * *********************** */
 
+    {
     // Get the contract factory name.
     const contractName = "PangolinFactory";
-
     console.log("Deploying " + contractName + " contract.");
-
     // Use DAO multisig for the feeToSetter address.
-    const feeToSetter = "0x".concat(AccountId.fromString(multisigAccountId).toSolidityAddress());
-
-    //// Get the deployer address.
-    //const deployerEvmAddress = "0x".concat(AccountId.fromString(myAccountId).toSolidityAddress());
-
+    const feeToSetter = AccountId.fromString(multisigAccountId).toSolidityAddress();
     // Get the contract bytecode from Hardhat.
     const factory = await ethers.getContractFactory(contractName);
     const bytecode = factory.bytecode;
-
     // Create the deploy transaction.
     const contractCreate = new ContractCreateFlow()
         .setGas(100000)
         .setConstructorParameters(
-            new ContractFunctionParameters().addAddress(feeToSetter)
+            new ContractFunctionParameters()
+                .addAddress(feeToSetter)
         )
         .setBytecode(bytecode);
-
     // Sign the transaction with the client operator key and submit to a Hedera network.
     const txResponse = contractCreate.execute(client);
-
     // Get the receipt of the transaction.
     const receipt = (await txResponse).getReceipt(client);
-
     // Get the new contract ID.
     const newContractId = (await receipt).contractId;
-
     console.log("The new " + contractName + " contract ID is " + newContractId + ". Make a record of it!");
+    }
 
     // Get remaining account balance.
     const accountBalance = await new AccountBalanceQuery()

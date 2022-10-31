@@ -2,11 +2,14 @@
 pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/utils/Create2.sol";
 import "./PangolinStakingPositionsFunding.sol";
+import "./PangolinStakingPositionsStorage.sol";
 
-import '../hts-precompile/HederaResponseCodes.sol';
-import '../hts-precompile/HederaTokenService.sol';
+import "../hts-precompile/HederaResponseCodes.sol";
+import "../hts-precompile/HederaTokenService.sol";
 import "../hts-precompile/ExpiryHelper.sol";
+import "../exchange-rate-precompile/SelfFunding.sol";
 
 /**
  * @title Pangolin Staking Positions
@@ -49,52 +52,7 @@ import "../hts-precompile/ExpiryHelper.sol";
  *      - `totalStaked` fits 96 bits.
  *      - `totalRewardAdded` fits 96 bits.
  */
-contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinStakingPositionsFunding {
-    struct ValueVariables {
-        // The amount of tokens staked in the position or the contract.
-        uint96 balance;
-        // The sum of each staked token in the position or contract multiplied by its update time.
-        uint160 sumOfEntryTimes;
-    }
-
-    struct RewardSummations {
-        // Imaginary rewards accrued by a position with `lastUpdate == 0 && balance == 1`. At the
-        // end of each interval, the ideal position has a staking duration of `block.timestamp`.
-        // Since its balance is one, its “value” equals its staking duration. So, its value
-        // is also `block.timestamp` , and for a given reward at an interval, the ideal position
-        // accrues `reward * block.timestamp / totalValue`. Refer to `Ideal Position` section of
-        // the Proofs on why we need this variable.
-        uint256 idealPosition;
-        // The sum of `reward/totalValue` of each interval. `totalValue` is the sum of all staked
-        // tokens multiplied by their respective staking durations.  On every update, the
-        // `rewardPerValue` is incremented by rewards given during that interval divided by the
-        // total value, which is average staking duration multiplied by total staked. See Proofs.
-        uint256 rewardPerValue;
-    }
-
-    struct Position {
-        // Two variables that determine the share of rewards a position receives.
-        ValueVariables valueVariables;
-        // Summations snapshotted on the last update of the position.
-        RewardSummations rewardSummationsPaid;
-        // The sum of values (`balance * (block.timestamp - lastUpdate)`) of previous intervals. It
-        // is only updated accordingly when more tokens are staked into an existing position. Other
-        // calls than staking (i.e.: harvest and withdraw) must reset the value to zero. Correctly
-        // updating this property allows for the staking duration of the existing balance of the
-        // position to not restart when staking more tokens to the position. So it allows combining
-        // together multiple positions with different staking durations. Refer to the `Combined
-        // Positions` section of the Proofs on why this works.
-        uint160 previousValues;
-        // The last time the position was updated.
-        uint48 lastUpdate;
-        // The last time the position’s staking duration was restarted (withdraw or harvest).
-        // This is used to prevent frontrunning when buying the NFT. It is not part of core algo.
-        uint48 lastDevaluation;
-    }
-
-    /** @notice The mapping of position identifiers to their properties. */
-    mapping(uint256 => Position) public positions;
-
+contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFunding, PangolinStakingPositionsFunding {
     /** @notice The contract that constructs and returns tokenURIs for position tokens. */
     IERC721 public immutable positionsToken;
 
@@ -107,11 +65,37 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
     /** @notice The fixed denominator used for storing summations. */
     uint256 private constant PRECISION = 2**128;
 
+    /** @notice Seconds in three months */
+    uint256 private constant THREE_MONTHS = 90 days;
+
+    /** @notice The duration the rent should be payed for in advance. */
+    uint256 private constant RENT_DOWNPAYMENT_DURATION = THREE_MONTHS * 2; // 6 months
+
+    /** @notice The duration the rent should be payed for in advance. */
+    uint256 private constant EVICTION_POINT = THREE_MONTHS; // < ~3 months downpayment remaining
+
+    /** @notice The rent in tinycents for a position for three months. */
+    uint256 private constant THREE_MONTHS_RENT = 500_000_000; // 5 cents in tinycents
+
+    /** @notice The rent in tinybars for a position for three months. */
+    int64 public rentInTinyBars = -1; // will not use this when negative
+
+    /** @notice The number of positions a storage contract can hold. */
+    uint256 private constant STORAGE_SIZE = 2500; // five hundred
+
+    /** @dev The privileged role that can evict positions not paying rent. */
+    bytes32 private constant EVICTION_ROLE = keccak256("EVICTION_ROLE");
+
     /** @notice The event emitted when withdrawing or harvesting from a position. */
     event Withdrawn(uint256 indexed positionId, uint256 indexed amount, uint256 indexed reward);
 
     /** @notice The event emitted when staking to, minting, or compounding a position. */
     event Staked(uint256 indexed positionId, uint256 indexed amount, uint256 indexed reward);
+
+    /** @notice The event emitted when user is evicted for not paying rent. */
+    event Evicted(uint256 indexed positionId, uint256 indexed amount, address indexed owner, address to, bool toOwner);
+
+    event SetRentInTinyBars(bool isDisabled, uint256 rent);
 
     modifier onlyOwner(uint256 positionId) {
         if (positionsToken.ownerOf(positionId) != msg.sender) revert UnprivilegedCaller();
@@ -129,6 +113,16 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
     )
         PangolinStakingPositionsFunding(newRewardsToken, newAdmin)
     {
+        _grantRole(EVICTION_ROLE, newAdmin);
+
+        // Associate the reward token
+
+        // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
+        int associateResponseCode = associateToken(address(this), newRewardsToken);
+        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Assocation failed');
+
+        // Create the NFT
+
         // Define the key of this contract.
         IHederaTokenService.KeyValue memory key;
         key.contractId = address(this);
@@ -164,8 +158,8 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
         token.expiry = createAutoRenewExpiry(address(this), 90 days);
 
         // Create the token.
-        (int256 responseCode, address tokenAddress) = createNonFungibleToken(token);
-        if (responseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
+        (int256 createResponseCode, address tokenAddress) = createNonFungibleToken(token);
+        if (createResponseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
 
         // Set the immutable state variable for the positions token.
         positionsToken = IERC721(tokenAddress);
@@ -176,13 +170,22 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      * @param amount The amount of tokens to transfer from the caller to the position.
      * @param positionId The identifier of the newly created position.
      */
-    function mint(uint256 amount) external returns (uint256 positionId) {
+    function mint(uint256 amount) external payable returns (uint256 positionId) {
         // Update summations. Note that rewards accumulated when there is no one staking will
         // be lost. But this is only a small risk of value loss when the contract first goes live.
         _updateRewardSummations();
 
+        // Mint the HTS NFT for bookkeeping.
+        positionId = _mint();
+
+        // Create the storage contract for the position storage.
+        _createPositionsStorageContract(positionId);
+
         // Use a private function to handle the logic pertaining to depositing into a position.
-        _stake(positionId = _mint(), amount);
+        _stake(positionId, amount);
+
+        // Get rent amount downpayment for a good long duration.
+        _receiveRent(RENT_DOWNPAYMENT_DURATION);
     }
 
     /**
@@ -190,39 +193,48 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      * @param amount The amount of tokens to deposit into the position.
      * @param positionId The identifier of the position to deposit the funds into.
      */
-    function stake(uint256 positionId, uint256 amount) external {
+    function stake(uint256 positionId, uint256 amount) external payable {
         // Update summations. Note that rewards accumulated when there is no one staking will
         // be lost. But this is only a small risk of value loss when the contract first goes live.
         _updateRewardSummations();
 
         // Use a private function to handle the logic pertaining to depositing into a position.
-        _stake(positionId, amount);
+        uint256 rentTime = _stake(positionId, amount);
+
+        // Get rent amount for the duration not payed. In other words, topping it up.
+        _receiveRent(rentTime);
     }
 
     /**
      * @notice External function to claim the accrued rewards of a position.
      * @param positionId The identifier of the position to claim the rewards of.
      */
-    function harvest(uint256 positionId) external {
+    function harvest(uint256 positionId) external payable {
         // Update summations that govern the reward distribution.
         _updateRewardSummations();
 
         // Use a private function to handle the logic pertaining to harvesting rewards.
         // `_withdraw` with zero input amount works as harvesting.
-        _withdraw(positionId, 0);
+        uint256 rentTime = _withdraw(positionId, 0);
+
+        // Get rent amount for the duration not payed. In other words, topping it up.
+        _receiveRent(rentTime);
     }
 
     /**
      * @notice External function to deposit the accrued rewards of a position back to itself.
      * @param positionId The identifier of the position to compound the rewards of.
      */
-    function compound(uint256 positionId) external {
+    function compound(uint256 positionId) external payable {
         // Update summations that govern the reward distribution.
         _updateRewardSummations();
 
         // Use a private function to handle the logic pertaining to compounding rewards.
         // `_stake` with zero input amount works as compounding.
-        _stake(positionId, 0);
+        uint256 rentTime = _stake(positionId, 0);
+
+        // Get rent amount for the duration not payed. In other words, topping it up.
+        _receiveRent(rentTime);
     }
 
     /**
@@ -231,21 +243,24 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      * @param positionId The identifier of the position to withdraw the balance.
      * @param amount The amount of staked tokens, excluding rewards, to withdraw from the position.
      */
-    function withdraw(uint256 positionId, uint256 amount) external {
+    function withdraw(uint256 positionId, uint256 amount) external payable {
         // Update summations that govern the reward distribution.
         _updateRewardSummations();
 
         // Use a private function to handle the logic pertaining to withdrawing the staked balance.
-        _withdraw(positionId, amount);
+        uint256 rentTime = _withdraw(positionId, amount);
+
+        // Get rent amount for the duration not payed. In other words, topping it up.
+        _receiveRent(rentTime);
     }
 
     /**
      * @notice External function to close a position by burning the associated NFT.
      * @param positionId The identifier of the position to close.
      */
-    function burn(uint256 positionId) external {
+    function burn(uint256 positionId) external onlyOwner(positionId) {
         // To prevent mistakes, ensure only valueless positions can be burned.
-        if (positions[positionId].valueVariables.balance != 0) revert InvalidToken();
+        if (positions(positionId).valueVariables.balance != 0) revert InvalidToken();
 
         // Burn the associated NFT and delete all position properties.
         _burn(positionId);
@@ -268,7 +283,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      * @param positionIds An array of identifiers of positions to stake to.
      * @param amounts An array of amount of tokens to stake to the corresponding positions.
      */
-    function multiStake(uint256[] calldata positionIds, uint256[] calldata amounts) external {
+    function multiStake(uint256[] calldata positionIds, uint256[] calldata amounts) external payable {
         // Update summations only once. Note that rewards accumulated when there is no one
         // staking will be lost. But this is only a small risk of value loss if a reward period
         // during no one staking is followed by staking.
@@ -278,14 +293,18 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
         uint256 length = positionIds.length;
         if (length != amounts.length) revert MismatchedArrayLengths();
 
+        uint256 rentTime = 0;
         for (uint256 i = 0; i < length; ) {
-            _stake(positionIds[i], amounts[i]);
+            rentTime += _stake(positionIds[i], amounts[i]);
 
             // Counter realistically cannot overflow.
             unchecked {
                 ++i;
             }
         }
+
+        // Get rent amount for the duration not payed. In other words, topping it up.
+        _receiveRent(rentTime);
     }
 
     /**
@@ -294,7 +313,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      * @param positionIds An array of identifiers of positions to withdraw from.
      * @param amounts An array of amount of tokens to withdraw from corresponding positions.
      */
-    function multiWithdraw(uint256[] calldata positionIds, uint256[] calldata amounts) external {
+    function multiWithdraw(uint256[] calldata positionIds, uint256[] calldata amounts) external payable {
         // Update summations only once.
         _updateRewardSummations();
 
@@ -302,14 +321,18 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
         uint256 length = positionIds.length;
         if (length != amounts.length) revert MismatchedArrayLengths();
 
+        uint256 rentTime = 0;
         for (uint256 i = 0; i < length; ) {
-            _withdraw(positionIds[i], amounts[i]);
+            rentTime = _withdraw(positionIds[i], amounts[i]);
 
             // Counter realistically cannot overflow.
             unchecked {
                 ++i;
             }
         }
+
+        // Get rent amount for the duration not payed. In other words, topping it up.
+        _receiveRent(rentTime);
     }
 
     /**
@@ -326,6 +349,52 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
         if (updateResponseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
     }
 
+    function setRentInTinyBars(int64 rent) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        bool isDisabled = rent < 0;
+        rentInTinyBars = rent;
+        emit SetRentInTinyBars(isDisabled, isDisabled ? 0 : uint64(rent));
+    }
+
+    function withdraw(address to, uint256 amount) external payable onlyRole(DEFAULT_ADMIN_ROLE) {
+        to.call{ value: amount }("");
+    }
+
+    function evict(uint256[] calldata positionIds, address to) external onlyRole(EVICTION_ROLE) {
+        _updateRewardSummations();
+
+        uint256 length = positionIds.length;
+        for (uint256 i = 0; i < length; ) {
+            uint256 positionId = positionIds[i];
+            Position memory position = positions(positionId);
+
+            uint256 rentTime = block.timestamp - position.lastUpdate;
+            if (rentTime < EVICTION_POINT) revert TooEarly();
+
+            uint256 amount = position.valueVariables.balance + _positionPendingRewards(position);
+            address owner = positionsToken.ownerOf(positionId);
+
+            _burn(positionId);
+
+            // We have to have a fallback because an user might unassociated the reward token.
+            bool toOwner;
+            try rewardsToken.transfer(owner, amount) returns (bool success) {
+                if (!success) {
+                    rewardsToken.transfer(to, amount);
+                } else {
+                    toOwner = true;
+                }
+            } catch {
+                rewardsToken.transfer(to, amount);
+            }
+
+            emit Evicted(positionId, amount, owner, to, toOwner);
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
     /**
      * @notice External view function to get the reward rate of a position.
      * @dev In SAR, positions have different APRs, unlike other staking algorithms. This external
@@ -338,7 +407,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
     function positionRewardRate(uint256 positionId) external view returns (uint256) {
         // Get totalValue and positionValue.
         uint256 totalValue = _getValue(totalValueVariables);
-        uint256 positionValue = _getValue(positions[positionId].valueVariables);
+        uint256 positionValue = _getValue(positions(positionId).valueVariables);
 
         // Return the rewardRate of the position. Do not revert if totalValue is zero.
         return positionValue == 0 ? 0 : (rewardRate() * positionValue) / totalValue;
@@ -352,7 +421,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      */
     function positionPendingRewards(uint256 positionId) external view returns (uint256) {
         // Create a storage pointer for the position.
-        Position storage position = positions[positionId];
+        Position memory position = positions(positionId);
 
         // Get the delta of summations. Use incremented `rewardSummationsStored` based on the
         // pending rewards.
@@ -362,10 +431,59 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
         return _earned(deltaRewardSummations, position);
     }
 
+    function getPositionsStorageContract(uint256 positionId) external view returns (address) {
+        uint256 contractIndex = _getPositionsStorageContractIndex(positionId);
+        address positionsStorageContract = _getPositionsStorageContract(contractIndex);
+        return positionsStorageContract.code.length == 0 ? address(0) : positionsStorageContract;
+    }
+
+    function _createPositionsStorageContract(uint256 positionId) private {
+        uint256 contractIndex = _getPositionsStorageContractIndex(positionId);
+        address positionsStorageContract = _getPositionsStorageContract(contractIndex);
+        if (positionsStorageContract.code.length == 0) {
+            Create2.deploy(
+                0,
+                bytes32(contractIndex),
+                type(PangolinStakingPositionsStorage).creationCode
+            );
+        }
+    }
+
+    function positions(uint256 positionId) public view returns (Position memory) {
+        uint256 contractIndex = _getPositionsStorageContractIndex(positionId);
+        address positionsStorageContract = _getPositionsStorageContract(contractIndex);
+        return PangolinStakingPositionsStorage(positionsStorageContract).positions(positionId);
+    }
+
+    function _setPosition(uint256 positionId, Position memory position) private {
+        uint256 contractIndex = _getPositionsStorageContractIndex(positionId);
+        address positionsStorageContract = _getPositionsStorageContract(contractIndex);
+        PangolinStakingPositionsStorage(positionsStorageContract).updatePosition(positionId, position);
+    }
+
+    function _deletePosition(uint256 positionId) private {
+        uint256 contractIndex = _getPositionsStorageContractIndex(positionId);
+        address positionsStorageContract = _getPositionsStorageContract(contractIndex);
+        PangolinStakingPositionsStorage(positionsStorageContract).deletePosition(positionId);
+    }
+
+    function _getPositionsStorageContractIndex(uint256 positionId) private pure returns (uint256) {
+        return positionId / STORAGE_SIZE;
+    }
+
+    function _receiveRent(uint256 rentTime) private {
+        int256 tmpRentInTinyBars = rentInTinyBars;
+        uint256 totalRent = tmpRentInTinyBars < 0
+            ? rentTime * tinycentsToTinybars(THREE_MONTHS_RENT) / THREE_MONTHS
+            : rentTime * uint256(tmpRentInTinyBars) / THREE_MONTHS;
+        if (msg.value < totalRent || msg.value > totalRent * 2) revert InvalidAmount(); // don't bother with refund. rent amount is minimal.
+    }
+
     /**
      * @notice Private function to deposit tokens to an existing position.
      * @param amount The amount of tokens to deposit into the position.
      * @param positionId The identifier of the position to deposit the funds into.
+     * @return rentTime The duration for calculating the amount of rent to be topped up.
      * @dev Specifications:
      *      - Deposit `amount` tokens to the position associated with `positionId`,
      *      - Make the staking duration of `amount` restart,
@@ -374,9 +492,9 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      *      - Make the staking duration of `reward` tokens start from zero.
      *      - Do not make the staking duration of the existing `balance` restart,
      */
-    function _stake(uint256 positionId, uint256 amount) private onlyOwner(positionId) {
+    function _stake(uint256 positionId, uint256 amount) private onlyOwner(positionId) returns (uint256 rentTime) {
         // Create a storage pointer for the position.
-        Position storage position = positions[positionId];
+        Position memory position = positions(positionId);
 
         // Get rewards accrued in the position.
         uint256 reward = _positionPendingRewards(position);
@@ -390,25 +508,27 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
         if (newTotalStaked > type(uint96).max) revert Overflow();
 
         unchecked {
+            // The duration for calculating the amount of rent to be topped up.
+            rentTime = block.timestamp - position.lastUpdate;
+
             // Increment the state variables pertaining to total value calculation.
             uint160 addedEntryTimes = uint160(block.timestamp * totalAmount);
             totalValueVariables.sumOfEntryTimes += addedEntryTimes;
             totalValueVariables.balance = uint96(newTotalStaked);
 
             // Increment the position properties pertaining to position value calculation.
-            ValueVariables storage positionValueVariables = position.valueVariables;
+            ValueVariables memory positionValueVariables = position.valueVariables;
             uint256 oldBalance = positionValueVariables.balance;
             positionValueVariables.balance = uint96(oldBalance + totalAmount);
             positionValueVariables.sumOfEntryTimes += addedEntryTimes;
 
             // Increment the previousValues.
-            position.previousValues += uint160(
-                oldBalance * (block.timestamp - position.lastUpdate)
-            );
+            position.previousValues += uint160(oldBalance * rentTime);
         }
 
         // Snapshot the lastUpdate and summations.
         _snapshotRewardSummations(position);
+        _setPosition(positionId, position);
 
         // Transfer amount tokens from user to the contract, and emit the associated event.
         if (amount != 0) _transferFromCaller(amount);
@@ -420,15 +540,16 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      *         rewards from the position. Also acts as harvest when input amount is zero.
      * @param positionId The identifier of the position to withdraw the balance.
      * @param amount The amount of staked tokens, excluding rewards, to withdraw from the position.
+     * @return rentTime The duration for calculating the amount of rent to be topped up.
      * @dev Specifications:
      *      - Claim accrued `reward` tokens of the position,
      *      - Send `reward` tokens from the contract to the position owner,
      *      - Send `amount` tokens from the contract to the position owner,
      *      - Make the staking duration of the remaining `balance` restart,
      */
-    function _withdraw(uint256 positionId, uint256 amount) private onlyOwner(positionId) {
+    function _withdraw(uint256 positionId, uint256 amount) private onlyOwner(positionId) returns (uint256 rentTime) {
         // Create a storage pointer for the position.
-        Position storage position = positions[positionId];
+        Position memory position = positions(positionId);
 
         // Get position balance and ensure sufficient balance exists.
         uint256 oldBalance = position.valueVariables.balance;
@@ -440,6 +561,9 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
         if (totalAmount == 0) revert NoEffect();
 
         unchecked {
+            // The duration for calculating the amount of rent to be topped up.
+            rentTime = block.timestamp - position.lastUpdate;
+
             // Get the remaining balance in the position.
             uint256 remaining = oldBalance - amount;
 
@@ -448,7 +572,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
 
             // Update sumOfEntryTimes.
             uint256 newEntryTimes = block.timestamp * remaining;
-            ValueVariables storage positionValueVariables = position.valueVariables;
+            ValueVariables memory positionValueVariables = position.valueVariables;
             totalValueVariables.sumOfEntryTimes = uint160(
                 totalValueVariables.sumOfEntryTimes +
                     newEntryTimes -
@@ -468,6 +592,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
 
         // Snapshot the lastUpdate and summations.
         _snapshotRewardSummations(position);
+        _setPosition(positionId, position);
 
         // Transfer withdrawn amount and rewards to the user, and emit the associated event.
         _transferToCaller(totalAmount);
@@ -485,7 +610,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      */
     function _emergencyExit(uint256 positionId) private onlyOwner(positionId) {
         // Move the queried position to memory.
-        ValueVariables memory positionValueVariables = positions[positionId].valueVariables;
+        ValueVariables memory positionValueVariables = positions(positionId).valueVariables;
 
         // Decrement the state variables pertaining to total value calculation.
         uint96 balance = positionValueVariables.balance;
@@ -525,7 +650,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      * @notice Private function to snapshot two rewards variables and record the timestamp.
      * @param position The storage pointer to the position to record the snapshot for.
      */
-    function _snapshotRewardSummations(Position storage position) private {
+    function _snapshotRewardSummations(Position memory position) private view {
         position.lastUpdate = uint48(block.timestamp);
         position.rewardSummationsPaid = rewardSummationsStored;
     }
@@ -537,7 +662,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      * @param position The properties of the position.
      * @return The accrued rewards of the position.
      */
-    function _positionPendingRewards(Position storage position) private view returns (uint256) {
+    function _positionPendingRewards(Position memory position) private view returns (uint256) {
         // Get the change in summations since the position was last updated. When calculating
         // the delta, do not increment `rewardSummationsStored`, as they had to be updated anyways.
         RewardSummations memory deltaRewardSummations = _getDeltaRewardSummations(position, false);
@@ -554,7 +679,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      *                  rewards of the contract.
      * @return The difference between the `rewardSummationsStored` and `rewardSummationsPaid`.
      */
-    function _getDeltaRewardSummations(Position storage position, bool increment)
+    function _getDeltaRewardSummations(Position memory position, bool increment)
         private
         view
         returns (RewardSummations memory)
@@ -563,7 +688,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
         if (position.lastUpdate == 0) return RewardSummations(0, 0);
 
         // Create storage pointer to the position’s summations.
-        RewardSummations storage rewardSummationsPaid = position.rewardSummationsPaid;
+        RewardSummations memory rewardSummationsPaid = position.rewardSummationsPaid;
 
         // If requested, return the incremented `rewardSummationsStored`.
         if (increment) {
@@ -625,7 +750,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      *      below is intuitive and simple to derive. We will leave proving it to the reader.
      * @return The total value of contract or a position.
      */
-    function _getValue(ValueVariables storage valueVariables) private view returns (uint256) {
+    function _getValue(ValueVariables memory valueVariables) private view returns (uint256) {
         return block.timestamp * valueVariables.balance - valueVariables.sumOfEntryTimes;
     }
 
@@ -635,9 +760,9 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
      * @param position The position to check the accrued rewards of.
      * @return The accrued rewards of the position.
      */
-    function _earned(RewardSummations memory deltaRewardSummations, Position storage position)
+    function _earned(RewardSummations memory deltaRewardSummations, Position memory position)
         private
-        view
+        pure
         returns (uint256)
     {
         // Refer to the Combined Position section of the Proofs on why and how this formula works.
@@ -648,6 +773,12 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
                     (deltaRewardSummations.rewardPerValue * position.lastUpdate)) *
                     position.valueVariables.balance) +
                     (deltaRewardSummations.rewardPerValue * position.previousValues)) / PRECISION;
+    }
+    function _getPositionsStorageContract(uint256 contractIndex) private view returns (address) {
+        return Create2.computeAddress(
+            bytes32(contractIndex),
+            keccak256(type(PangolinStakingPositionsStorage).creationCode)
+        );
     }
 
     /* *********************** */
@@ -672,9 +803,9 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, PangolinS
     //    return tokens;
     //}
 
-    function _burn(uint256 tokenId) private onlyOwner(tokenId) {
+    function _burn(uint256 tokenId) private {
         // Delete position when burning the NFT.
-        delete positions[tokenId];
+        _deletePosition(tokenId);
 
         // Burn the token using HTS.
         int64[] memory tokenIds;

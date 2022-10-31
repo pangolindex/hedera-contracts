@@ -41,11 +41,29 @@ module.exports = {
         }
       },
       {
-        version: "0.8.15",
+        version: "0.8.9",
         settings: {
           optimizer: {
             enabled: true,
             runs: 1000
+          }
+        }
+      },
+      {
+        version: "0.8.13",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 1000000
+          }
+        }
+      },
+      {
+        version: "0.8.15",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 2000
           }
         }
       },
