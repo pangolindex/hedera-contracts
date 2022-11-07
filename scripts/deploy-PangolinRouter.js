@@ -41,7 +41,7 @@ async function main() {
 
     // Create the deploy transaction.
     const contractCreate = new ContractCreateFlow()
-        .setGas(100000)
+        .setGas(1000000)
         .setConstructorParameters(
             new ContractFunctionParameters()
                 .addAddress(factoryAddress)

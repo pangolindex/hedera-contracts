@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity =0.6.6;
+pragma solidity =0.6.12;
+
+import '../hts-precompile/HederaResponseCodes.sol';
+import '../hts-precompile/HederaTokenService.sol';
 
 import '../pangolin-core/interfaces/IPangolinFactory.sol';
 import '../pangolin-lib/libraries/TransferHelper.sol';
@@ -10,7 +13,7 @@ import './libraries/SafeMath.sol';
 import './interfaces/IERC20.sol';
 import './interfaces/IWAVAX.sol';
 
-contract PangolinRouter is IPangolinRouter {
+contract PangolinRouter is IPangolinRouter, HederaTokenService {
     using SafeMath for uint;
 
     address public immutable override factory;
@@ -25,7 +28,12 @@ contract PangolinRouter is IPangolinRouter {
     constructor(address _factory, address _wavaxContract) public {
         factory = _factory;
         wavaxContract = IWAVAX(_wavaxContract);
-        wavaxToken = address(uint160(_wavaxContract) + 1);
+        address tmpWavaxToken = address(uint160(_wavaxContract) + 1);
+        wavaxToken = tmpWavaxToken;
+
+        // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
+        int responseCode = associateToken(address(this), tmpWavaxToken);
+        require(responseCode == HederaResponseCodes.SUCCESS, 'Assocation failed');
     }
 
     receive() external payable {
