@@ -76,10 +76,10 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
         uint deadline
     ) external virtual override ensure(deadline) returns (uint amountA, uint amountB, uint liquidity) {
         (amountA, amountB) = _addLiquidity(tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin);
-        address pair = PangolinLibrary.pairFor(factory, tokenA, tokenB);
-        TransferHelper.safeTransferFrom(tokenA, msg.sender, pair, amountA);
-        TransferHelper.safeTransferFrom(tokenB, msg.sender, pair, amountB);
-        liquidity = IPangolinPair(pair).mint(to);
+        address pairContract = PangolinLibrary.pairFor(factory, tokenA, tokenB);
+        TransferHelper.safeTransferFrom(tokenA, msg.sender, pairContract, amountA);
+        TransferHelper.safeTransferFrom(tokenB, msg.sender, pairContract, amountB);
+        liquidity = IPangolinPair(pairContract).mint(to);
     }
     function addLiquidityAVAX(
         address token,
@@ -97,11 +97,11 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
             amountTokenMin,
             amountAVAXMin
         );
-        address pair = PangolinLibrary.pairFor(factory, token, wavaxToken);
-        TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);
+        address pairContract = PangolinLibrary.pairFor(factory, token, wavaxToken);
+        TransferHelper.safeTransferFrom(token, msg.sender, pairContract, amountToken);
         wavaxContract.deposit{value: amountAVAX}();
-        TransferHelper.safeTransfer(wavaxToken, pair, amountAVAX);
-        liquidity = IPangolinPair(pair).mint(to);
+        TransferHelper.safeTransfer(wavaxToken, pairContract, amountAVAX);
+        liquidity = IPangolinPair(pairContract).mint(to);
         // refund dust AVAX, if any
         if (msg.value > amountAVAX) TransferHelper.safeTransferAVAX(msg.sender, msg.value - amountAVAX);
     }
@@ -116,9 +116,10 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
         address to,
         uint deadline
     ) public virtual override ensure(deadline) returns (uint amountA, uint amountB) {
-        address pair = PangolinLibrary.pairFor(factory, tokenA, tokenB);
-        IERC20(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
-        (uint amount0, uint amount1) = IPangolinPair(pair).burn(to);
+        address pairContract = PangolinLibrary.pairFor(factory, tokenA, tokenB);
+        address pairToken = IPangolinPair(pairContract).pairToken();
+        IERC20(pairToken).transferFrom(msg.sender, pairContract, liquidity); // send liquidity to pair
+        (uint amount0, uint amount1) = IPangolinPair(pairContract).burn(to);
         (address token0,) = PangolinLibrary.sortTokens(tokenA, tokenB);
         (amountA, amountB) = tokenA == token0 ? (amount0, amount1) : (amount1, amount0);
         require(amountA >= amountAMin, 'PangolinRouter: INSUFFICIENT_A_AMOUNT');
@@ -284,18 +285,18 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
         for (uint i; i < path.length - 1; i++) {
             (address input, address output) = (path[i], path[i + 1]);
             (address token0,) = PangolinLibrary.sortTokens(input, output);
-            IPangolinPair pair = IPangolinPair(PangolinLibrary.pairFor(factory, input, output));
+            IPangolinPair pairContract = IPangolinPair(PangolinLibrary.pairFor(factory, input, output));
             uint amountInput;
             uint amountOutput;
             { // scope to avoid stack too deep errors
-            (uint reserve0, uint reserve1,) = pair.getReserves();
+            (uint reserve0, uint reserve1,) = pairContract.getReserves();
             (uint reserveInput, uint reserveOutput) = input == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
-            amountInput = IERC20(input).balanceOf(address(pair)).sub(reserveInput);
+            amountInput = IERC20(input).balanceOf(address(pairContract)).sub(reserveInput);
             amountOutput = PangolinLibrary.getAmountOut(amountInput, reserveInput, reserveOutput);
             }
             (uint amount0Out, uint amount1Out) = input == token0 ? (uint(0), amountOutput) : (amountOutput, uint(0));
             address to = i < path.length - 2 ? PangolinLibrary.pairFor(factory, output, path[i + 2]) : _to;
-            pair.swap(amount0Out, amount1Out, to, new bytes(0));
+            pairContract.swap(amount0Out, amount1Out, to, new bytes(0));
         }
     }
     function swapExactTokensForTokensSupportingFeeOnTransferTokens(
