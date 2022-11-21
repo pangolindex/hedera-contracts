@@ -66,6 +66,9 @@ contract NftVotingVault is INftVotingVault, HTS_NftVotingVault {
         DEPLOYER = msg.sender;
     }
 
+    /// @dev Accept HBAR for rent (shouldn't be needed with no state growth)
+    receive() external payable {}
+
     function unfreeze(int64 receiptId) external {
         IHTS_NftVotingVault.NonFungibleTokenInfo memory receiptInfo = _getInfo(RECEIPT_NFT, receiptId);
         if (receiptInfo.ownerId != msg.sender) revert InvalidOwner();
