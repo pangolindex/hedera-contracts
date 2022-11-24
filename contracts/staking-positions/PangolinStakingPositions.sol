@@ -4,7 +4,8 @@ pragma solidity 0.8.15;
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
 import "./PangolinStakingPositionsFunding.sol";
-import "./PangolinStakingPositionsStorage.sol";
+import "./PangolinStakingPositionsStructs.sol";
+import { PangolinStakingPositionsStorage } from "./PangolinStakingPositionsStorage.sol";
 
 import "../hts-precompile/HederaResponseCodes.sol";
 import "../hts-precompile/HederaTokenService.sol";
@@ -479,6 +480,13 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
         if (msg.value < totalRent || msg.value > totalRent * 2) revert InvalidAmount(); // don't bother with refund. rent amount is minimal.
     }
 
+    function _getPositionsStorageContract(uint256 contractIndex) private view returns (address) {
+        return Create2.computeAddress(
+            bytes32(contractIndex),
+            keccak256(type(PangolinStakingPositionsStorage).creationCode)
+        );
+    }
+
     /**
      * @notice Private function to deposit tokens to an existing position.
      * @param amount The amount of tokens to deposit into the position.
@@ -773,12 +781,6 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
                     (deltaRewardSummations.rewardPerValue * position.lastUpdate)) *
                     position.valueVariables.balance) +
                     (deltaRewardSummations.rewardPerValue * position.previousValues)) / PRECISION;
-    }
-    function _getPositionsStorageContract(uint256 contractIndex) private view returns (address) {
-        return Create2.computeAddress(
-            bytes32(contractIndex),
-            keccak256(type(PangolinStakingPositionsStorage).creationCode)
-        );
     }
 
     /* *********************** */
