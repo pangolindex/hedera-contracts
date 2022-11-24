@@ -6,20 +6,23 @@ import './interfaces/IPangolinFactory.sol';
 import './PangolinPair.sol';
 import './LogicalBurn.sol';
 
-contract PangolinFactory is IPangolinFactory {
+contract PangolinFactory is IPangolinFactory, HederaTokenService {
     address public override feeTo;
     address public override feeToSetter;
     uint public override allPairsLength;
-    uint private constant MAX_ASSOCIATIONS = 1000;
 
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
-    event BurnContractCreated(address indexed logicalBurnAddress, uint indexed index);
 
     constructor(address _feeToSetter) public {
         feeToSetter = _feeToSetter;
     }
 
     function getPair(address tokenA, address tokenB) public view override returns (address pair) {
+        address pairContract = getPairContract(tokenA, tokenB);
+        if (pairContract != address(0)) pair = IPangolinPair(pairContract).pairToken();
+    }
+
+    function getPairContract(address tokenA, address tokenB) public view override returns (address pair) {
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
         pair = address(uint(keccak256(abi.encodePacked(
             hex'ff',
@@ -32,51 +35,19 @@ contract PangolinFactory is IPangolinFactory {
         }
     }
 
-    function getBurnContract(uint index) public view override returns (address) {
-        uint length = allPairsLength;
-        if (length == 0) {
-            return address(0);
-        } else {
-            return ((length - 1) / MAX_ASSOCIATIONS >= index)
-                ? address(uint(keccak256(abi.encodePacked(
-                    hex'ff',
-                    address(this),
-                    index,
-                    keccak256(type(LogicalBurn).creationCode)
-                ))))
-                : address(0);
-        }
-    }
-
     function createPair(address tokenA, address tokenB) external payable override returns (address pair) {
         require(tokenA != tokenB, 'Pangolin: IDENTICAL_ADDRESSES');
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
         require(token0 != address(0), 'Pangolin: ZERO_ADDRESS');
-        require(getPair(token0, token1) == address(0), 'Pangolin: PAIR_EXISTS'); // single check is sufficient
-
-        // Create the burn contract
-        // contract that will work as logical burn for initial pair token mint. there has to be
-        // a new burn contract deployed after a thousand, because thousand is the max token association.
-        uint256 burnContractIndex = allPairsLength / MAX_ASSOCIATIONS;
-        address burnContract;
-        if (allPairsLength % MAX_ASSOCIATIONS == 0) {
-            bytes memory burnContractBytecode = type(LogicalBurn).creationCode;
-            assembly {
-                burnContract := create2(0, add(burnContractBytecode, 32), mload(burnContractBytecode), burnContractIndex)
-            }
-            emit BurnContractCreated(burnContract, burnContractIndex);
-        } else {
-            burnContract = getBurnContract(burnContractIndex);
-        }
-
-        // Create the pair contract
         bytes memory pairBytecode = type(PangolinPair).creationCode;
         bytes32 pairSalt = keccak256(abi.encodePacked(token0, token1));
         assembly {
             pair := create2(0, add(pairBytecode, 32), mload(pairBytecode), pairSalt)
         }
-        address pairToken = IPangolinPair(pair).initialize{ value: msg.value }(token0, token1, burnContract);
-        ILogicalBurn(burnContract).associate(pairToken); // Allow burn contract to hold the pair token.
+        require(pair != address(0), 'Pangolin: PAIR_EXISTS');
+        address pairToken = IPangolinPair(pair).initialize{ value: msg.value }(token0, token1);
+        int associateResponseCode = associateToken(address(this), pairToken);
+        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Pangolin: ASSOCATION_FAILED');
         emit PairCreated(token0, token1, pair, allPairsLength++);
     }
 

@@ -28,7 +28,6 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
     address public override token1;
 
     address public override pairToken;
-    address public override logicalBurnContract;
 
     uint112 private reserve0;           // uses single storage slot, accessible via getReserves
     uint112 private reserve1;           // uses single storage slot, accessible via getReserves
@@ -74,7 +73,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
     }
 
     // called once by the factory at time of deployment
-    function initialize(address _token0, address _token1, address _burnAddress) external payable override returns (address) {
+    function initialize(address _token0, address _token1) external payable override returns (address) {
         require(msg.sender == factory, 'Pangolin: FORBIDDEN'); // sufficient check
 
         address[] memory tokens = new address[](2);
@@ -116,7 +115,6 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
 
         // Set the immutable state variables for the pair token.
         pairToken = tokenId;
-        logicalBurnContract = _burnAddress;
 
         return tokenId;
     }
@@ -185,7 +183,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
         uint _totalSupply = IERC20(pairToken).totalSupply(); // gas savings, must be defined here since totalSupply can update in _mintFee
         if (_totalSupply == 0) {
             liquidity = Math.sqrt(amount0.mul(amount1)).sub(MINIMUM_LIQUIDITY);
-           _mint(logicalBurnContract, MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
+           _mint(factory, MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
         } else {
             liquidity = Math.min(amount0.mul(_totalSupply) / _reserve0, amount1.mul(_totalSupply) / _reserve1);
         }
