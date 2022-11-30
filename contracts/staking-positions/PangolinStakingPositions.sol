@@ -437,8 +437,9 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
 
     function getPositionsStorageContract(uint256 positionId) external view returns (address) {
         uint256 contractIndex = _getPositionsStorageContractIndex(positionId);
-        address positionsStorageContract = _getPositionsStorageContract(contractIndex);
-        return positionsStorageContract.code.length == 0 ? address(0) : positionsStorageContract;
+        return contractIndex >= nextPositionsStorageContractIndex
+            ? address(0)
+            : _getPositionsStorageContract(contractIndex);
     }
 
     function _createPositionsStorageContract(uint256 positionId) private {
