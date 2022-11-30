@@ -63,6 +63,9 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
     /** @notice The variables that govern the reward distribution. */
     RewardSummations public rewardSummationsStored;
 
+    /** @notice The index of the next storage contract to be deployed. */
+    uint256 public nextPositionsStorageContractIndex = 0;
+
     /** @notice The fixed denominator used for storing summations. */
     uint256 private constant PRECISION = 2**128;
 
@@ -111,7 +114,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
     constructor(
         address newRewardsToken,
         address newAdmin
-    )
+    ) payable
         PangolinStakingPositionsFunding(newRewardsToken, newAdmin)
     {
         _grantRole(EVICTION_ROLE, newAdmin);
@@ -440,8 +443,8 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
 
     function _createPositionsStorageContract(uint256 positionId) private {
         uint256 contractIndex = _getPositionsStorageContractIndex(positionId);
-        address positionsStorageContract = _getPositionsStorageContract(contractIndex);
-        if (positionsStorageContract.code.length == 0) {
+        if (contractIndex >= nextPositionsStorageContractIndex) {
+            ++nextPositionsStorageContractIndex;
             Create2.deploy(
                 0,
                 bytes32(contractIndex),
