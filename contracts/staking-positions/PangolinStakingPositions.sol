@@ -822,17 +822,18 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
 
     function _mint() private returns (uint256 tokenId) {
         // Mint the token using HTS.
-        bytes[] memory metadata;
-        (int256 mintResponseCode,,int64[] memory serialNumbers) = mintToken(address(positionsToken), uint64(1), metadata);
+        (int256 mintResponseCode,,int64[] memory serialNumbers) =
+            mintToken(address(positionsToken), 0, new bytes[](1));
         if (mintResponseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
         tokenId = uint256(int256(serialNumbers[0]));
 
         // Transfer the token using HTS.
-        address[] memory froms;
+        address[] memory froms = new address[](1);
         froms[0] = address(this);
-        address[] memory tos;
+        address[] memory tos = new address[](1);
         tos[0] = msg.sender;
-        int256 transferResponseCode = transferNFTs(address(positionsToken), froms, tos, serialNumbers);
+        int256 transferResponseCode =
+            transferNFTs(address(positionsToken), froms, tos, serialNumbers);
         if (transferResponseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
     }
 }
