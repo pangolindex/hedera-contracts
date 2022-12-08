@@ -3,7 +3,9 @@ pragma solidity >=0.5.0;
 
 interface IPangolinPair {
     event Mint(address indexed sender, uint amount0, uint amount1);
+    event LogicalMint(address indexed to, uint value);
     event Burn(address indexed sender, uint amount0, uint amount1, address indexed to);
+    event LogicalBurn(address indexed from, uint value);
     event Swap(
         address indexed sender,
         uint amount0In,
