@@ -56,18 +56,6 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pangolin: TRANSFER_FAILED');
     }
 
-    event Mint(address indexed sender, uint amount0, uint amount1);
-    event Burn(address indexed sender, uint amount0, uint amount1, address indexed to);
-    event Swap(
-        address indexed sender,
-        uint amount0In,
-        uint amount1In,
-        uint amount0Out,
-        uint amount1Out,
-        address indexed to
-    );
-    event Sync(uint112 reserve0, uint112 reserve1);
-
     constructor() public {
         factory = msg.sender;
     }
@@ -125,6 +113,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
         require(mintResponseCode == HederaResponseCodes.SUCCESS, "Mint failed");
         int256 transferResponseCode = transferToken(pairToken, address(this), to, int64(uint64(amount)));
         require(transferResponseCode == HederaResponseCodes.SUCCESS, "Transfer failed");
+        emit LogicalMint(to, amount);
     }
 
     function _burn(address from, uint amount) private {
@@ -132,6 +121,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
         assert(amount <= MAXIMUM_HEDERA_TOKEN_SUPPLY);
         (int256 burnResponseCode,) = burnToken(pairToken, uint64(amount), new int64[](0));
         require(burnResponseCode == HederaResponseCodes.SUCCESS, "Burn failed");
+        emit LogicalBurn(from, amount);
     }
 
     // update reserves and, on the first call per block, price accumulators
