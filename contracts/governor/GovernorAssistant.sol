@@ -6,6 +6,10 @@ import "./storage/ReceiptStorage.sol";
 
 // SPDX-License-Identifier: MIT
 contract GovernorAssistant is IGovernorAssistant {
+    /**
+     * @notice Creates a new proposal storage contract
+     * @dev Returns the 0x0 address when a proposal storage contract has already been created
+     */
     function createProposal(uint64 proposalId) external returns (address) {
         return _create2(
             keccak256(abi.encodePacked(proposalId)),
@@ -23,6 +27,10 @@ contract GovernorAssistant is IGovernorAssistant {
         return address(uint160(uint256(hash)));
     }
 
+    /**
+     * @notice Creates a new receipt contract
+     * @dev Returns the 0x0 address when a receipt storage contract has already been created
+     */
     function createReceipt(uint64 proposalId, int64 nftId) external returns (address) {
         return _create2(
             keccak256(abi.encodePacked(proposalId, nftId)),
@@ -40,6 +48,10 @@ contract GovernorAssistant is IGovernorAssistant {
         return address(uint160(uint256(hash)));
     }
 
+    /**
+     * @dev When utilizing create2 via assembly, failing calls will return the 0x0 address
+     * @dev Consuming methods must handle this logic gracefully
+     */
     function _create2(bytes32 salt, bytes memory bytecode) private returns (address addr) {
         assembly {
             addr := create2(0, add(bytecode, 0x20), mload(bytecode), salt)
