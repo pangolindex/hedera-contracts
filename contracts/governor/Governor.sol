@@ -190,7 +190,8 @@ contract Governor is HTS_Governor {
         uint40 eta = uint40(block.timestamp + TIMELOCK.delay());
         IProposalStorage(proposalLocation).setEta(eta);
 
-        for (uint256 i; i < proposal.targets.length;) {
+        uint256 proposalActions = proposal.targets.length;
+        for (uint256 i; i < proposalActions;) {
             _queueOrRevert(proposal.targets[i], proposal.values[i], proposal.signatures[i], proposal.calldatas[i], eta);
             unchecked {++i;}
         }
@@ -210,7 +211,8 @@ contract Governor is HTS_Governor {
 
         IProposalStorage(proposalLocation).setExecuted();
 
-        for (uint256 i; i < proposal.targets.length;) {
+        uint256 proposalActions = proposal.targets.length;
+        for (uint256 i; i < proposalActions;) {
             TIMELOCK.executeTransaction{value: proposal.values[i]}(proposal.targets[i], proposal.values[i], proposal.signatures[i], proposal.calldatas[i], proposal.eta);
             unchecked {++i;}
         }
