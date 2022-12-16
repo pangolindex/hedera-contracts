@@ -31,7 +31,7 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
     int64 public constant DENOMINATOR = 10_000; // ten-thousand
 
-    address immutable PNG;
+    address public immutable PNG;
 
     bool public initialSupplyTransferredOut;
 
