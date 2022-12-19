@@ -154,23 +154,22 @@ async function main() {
     const createFirstPairRx = await createFirstPairTx.getReceipt(client);
     console.log(`PNG/WHBAR pair created`);
 
-    // TODO: Deploy PangoChef
-    // const createPangoChefTx = await new ContractCreateFlow()
-    //     .setBytecode(pangoChefContract.bytecode)
-    //     .setConstructorParameters(
-    //         new ContractFunctionParameters()
-    //             .addAddress(pngHTSAddress) // newRewardsToken
-    //             .addAddress(multisigAddress) // newAdmin
-    //             .addAddress(pangolinFactoryAddress) // newFactory
-    //             .addAddress(wrappedNativeTokenHTSAddress) // newWrappedNativeToken
-    //     )
-    //     .setGas(2_000_000)
-    //     .setInitialBalance(new Hbar(40))
-    //     .execute(client);
-    // const createPangoChefRx = await createPangoChefTx.getReceipt(client);
-    // const pangoChefId = createPangoChefRx.contractId;
-    // const pangoChefAddress = `0x${AccountId.fromString(pangoChefId).toSolidityAddress()}`;
-    // console.log(`PangoChef: ${pangoChefAddress}`);
+    // PangoChef
+    const createPangoChefTx = await new ContractCreateFlow()
+        .setBytecode(pangoChefContract.bytecode)
+        .setConstructorParameters(
+            new ContractFunctionParameters()
+                .addAddress(pngHTSAddress) // newRewardsToken
+                .addAddress(multisigAddress) // newAdmin
+                .addAddress(pangolinFactoryAddress) // newFactory
+                .addAddress(wrappedNativeTokenHTSAddress) // newWrappedNativeToken
+        )
+        .setGas(6_000_000)
+        .execute(client);
+    const createPangoChefRx = await createPangoChefTx.getReceipt(client);
+    const pangoChefId = createPangoChefRx.contractId;
+    const pangoChefAddress = `0x${AccountId.fromString(pangoChefId).toSolidityAddress()}`;
+    console.log(`PangoChef: ${pangoChefAddress}`);
 
     // TODO: RewardFundingForwarder
     // const createRewardFundingForwarderTx = await new ContractCreateFlow()
@@ -187,19 +186,20 @@ async function main() {
     // console.log(`RewardFundingForwarder: ${rewardFundingForwarderAddress}`);
 
     // TODO: PangolinStakingPositions
-    // const createPangolinStakingPositionsTx = await new ContractCreateFlow()
-    //     .setBytecode(pangolinStakingPositionsContract.bytecode)
-    //     .setConstructorParameters(
-    //         new ContractFunctionParameters()
-    //             .addAddress(pngHTSAddress) // newRewardsToken
-    //             .addAddress(multisigAddress) // newAdmin
-    //     )
-    //     .setGas(1_000_000)
-    //     .execute(client);
-    // const createPangolinStakingPositionsRx = await createPangolinStakingPositionsTx.getReceipt(client);
-    // const pangolinStakingPositionsId = createPangolinStakingPositionsRx.contractId;
-    // const pangolinStakingPositionsAddress = `0x${AccountId.fromString(pangolinStakingPositionsId).toSolidityAddress()}`;
-    // console.log(`PangolinStakingPositions: ${pangolinStakingPositionsAddress}`);
+    const createPangolinStakingPositionsTx = await new ContractCreateFlow()
+        .setBytecode(pangolinStakingPositionsContract.bytecode)
+        .setConstructorParameters(
+            new ContractFunctionParameters()
+                .addAddress(pngHTSAddress) // newRewardsToken
+                .addAddress(multisigAddress) // newAdmin
+        )
+        .setGas(1_400_000)
+        .setInitialBalance(new Hbar(40))
+        .execute(client);
+    const createPangolinStakingPositionsRx = await createPangolinStakingPositionsTx.getReceipt(client);
+    const pangolinStakingPositionsId = createPangolinStakingPositionsRx.contractId;
+    const pangolinStakingPositionsAddress = `0x${AccountId.fromString(pangolinStakingPositionsId).toSolidityAddress()}`;
+    console.log(`PangolinStakingPositions: ${pangolinStakingPositionsAddress}`);
 
     // TODO: Deploy Airdrop
     // TODO: Deploy FeeCollector
