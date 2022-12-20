@@ -641,11 +641,11 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
         uint256 rewardAmount,
         Slippage memory slippage
     ) private returns (uint256 poolTokenAmount) {
-        address poolToken = pool.tokenOrRecipient;
         address rewardPair = pool.rewardPair;
+        address poolContract = factory.getPairContract(rewardPair, address(rewardsToken));
 
         // Get token amounts from the pool.
-        (uint256 reserve0, uint256 reserve1, ) = IPangolinPair(poolToken).getReserves();
+        (uint256 reserve0, uint256 reserve1, ) = IPangolinPair(poolContract).getReserves();
 
         // Get the reward token’s pair’s amount from the reserves.
         uint256 pairAmount = address(rewardsToken) < rewardPair
@@ -668,7 +668,7 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
             IWAVAX(rewardPair).deposit{ value: pairAmount }();
 
             // Transfer reward pair tokens from this contract to the pair contract.
-            ERC20(rewardPair).safeTransfer(poolToken, pairAmount);
+            ERC20(rewardPair).safeTransfer(poolContract, pairAmount);
 
             // Refund user.
             unchecked {
@@ -677,14 +677,14 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
             }
         } else {
             // Transfer reward pair tokens from the user to the pair contract.
-            ERC20(rewardPair).safeTransferFrom(msg.sender, poolToken, pairAmount);
+            ERC20(rewardPair).safeTransferFrom(msg.sender, poolContract, pairAmount);
         }
 
         // Transfer reward tokens from the contract to the pair contract.
-        rewardsToken.safeTransfer(poolToken, rewardAmount);
+        rewardsToken.safeTransfer(poolContract, rewardAmount);
 
         // Mint liquidity tokens to the PangoChef and return the amount minted.
-        poolTokenAmount = IPangolinPair(poolToken).mint(address(this));
+        poolTokenAmount = IPangolinPair(poolContract).mint(address(this));
     }
 
     /**
