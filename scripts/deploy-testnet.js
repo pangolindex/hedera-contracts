@@ -59,7 +59,7 @@ async function main() {
     if (!WHBAR_CONTRACT_ID) {
         const createWrappedNativeTokenTx = await new ContractCreateFlow()
             .setBytecode(wrappedNativeTokenContract.bytecode)
-            .setGas(400_000)
+            .setGas(400_000) // 349,451
             .setInitialBalance(new Hbar(40))
             .execute(client);
         const createWrappedNativeTokenRx = await createWrappedNativeTokenTx.getReceipt(client);
@@ -74,7 +74,7 @@ async function main() {
     // WHBAR HTS Address
     const whbarQueryTx = await new ContractCallQuery()
         .setContractId(wrappedNativeTokenContractId)
-        .setGas(40_000)
+        .setGas(24_000) // 21,204
         .setFunction('TOKEN_ID')
         .execute(client);
     const wrappedNativeTokenHTSAddress = whbarQueryTx.getAddress(0);
@@ -87,7 +87,7 @@ async function main() {
             new ContractFunctionParameters()
                 .addAddress(myAccountAddress) // admin
         )
-        .setGas(800_000)
+        .setGas(700_000) // 657,136
         .setInitialBalance(new Hbar(40))
         .execute(client);
     const createTreasuryVesterRx = await createTreasuryVesterTx.getReceipt(client);
@@ -98,7 +98,7 @@ async function main() {
     // PNG HTS Information
     const pngQueryTx = await new ContractCallQuery()
         .setContractId(treasuryVesterId)
-        .setGas(45_000)
+        .setGas(24_000) // 21,284
         .setFunction('PNG')
         .execute(client);
     const pngHTSAddress = pngQueryTx.getAddress(0);
@@ -118,7 +118,7 @@ async function main() {
                 new ContractFunctionParameters()
                     .addAddress(multisigAddress) // feeToSetter
             )
-            .setGas(80_000)
+            .setGas(80_000) // 78,473
             .execute(client);
         const createPangolinFactoryRx = await createPangolinFactoryTx.getReceipt(client);
         pangolinFactoryId = createPangolinFactoryRx.contractId;
@@ -137,7 +137,7 @@ async function main() {
                 .addAddress(pangolinFactoryAddress) // factory
                 .addAddress(wrappedNativeTokenContractAddress) // whbar
         )
-        .setGas(550_000)
+        .setGas(80_000) // 78,476
         .execute(client);
     const createPangolinRouterRx = await createPangolinRouterTx.getReceipt(client);
     const pangolinRouterId = createPangolinRouterRx.contractId;
@@ -152,7 +152,7 @@ async function main() {
                 .addAddress(pngHTSAddress)
                 .addAddress(wrappedNativeTokenHTSAddress)
         )
-        .setGas(2_000_000)
+        .setGas(1_900_000) // 1,893,647
         .setPayableAmount(new Hbar(40))
         .execute(client);
     const createFirstPairRx = await createFirstPairTx.getReceipt(client);
@@ -168,7 +168,7 @@ async function main() {
                 .addAddress(pangolinFactoryAddress) // newFactory
                 .addAddress(wrappedNativeTokenHTSAddress) // newWrappedNativeToken
         )
-        .setGas(6_000_000)
+        .setGas(1_930_000) // 1,922,292
         .execute(client);
     const createPangoChefRx = await createPangoChefTx.getReceipt(client);
     const pangoChefId = createPangoChefRx.contractId;
@@ -197,7 +197,7 @@ async function main() {
                 .addAddress(pngHTSAddress) // newRewardsToken
                 .addAddress(multisigAddress) // newAdmin
         )
-        .setGas(1_400_000)
+        .setGas(1_400_000) // 1,390,489
         .setInitialBalance(new Hbar(40))
         .execute(client);
     const createPangolinStakingPositionsRx = await createPangolinStakingPositionsTx.getReceipt(client);
@@ -251,7 +251,7 @@ async function main() {
                 .addAddressArray(vesterAccounts) // accounts
                 .addInt64Array(vesterAllocations) // allocations
         )
-        .setGas(500_000)
+        .setGas(125_000) // 120,821
         .execute(client);
     const setRecipientsRx = await setRecipientsTx.getReceipt(client);
     console.log(`Treasury vester recipients set`);
@@ -308,10 +308,6 @@ async function main() {
     //
     // await vester.transferOwnership(timelock.address);
     // console.log('Transferred TreasuryVester ownership to Timelock.');
-    //
-    // // change swap fee recipient to fee collector
-    // await factory.setFeeTo(feeCollector.address);
-    // console.log('Set FeeCollector as the swap fee recipient.');
 
     const setFeeToSetterTx = await new ContractExecuteTransaction()
         .setContractId(pangolinFactoryId)
@@ -319,7 +315,7 @@ async function main() {
             new ContractFunctionParameters()
                 .addAddress(multisigAddress)
         )
-        .setGas(50_000)
+        .setGas(25_000) // 23,601
         .execute(client);
     const setFeeToSetterRx = await setFeeToSetterTx.getReceipt(client);
     console.log('Transferred PangolinFactory ownership to Multisig.');
@@ -331,11 +327,10 @@ async function main() {
 
     await grantRole(pangoChefId, ROLES.FUNDER_ROLE, myAccountAddress); // TODO: implement pangoChefRewardFundingForwarderAddress. fund via EOA for now
     await grantRole(pangoChefId, ROLES.FUNDER_ROLE, multisigAddress);
-
     await grantRole(pangoChefId, ROLES.POOL_MANAGER_ROLE, multisigAddress);
     await grantRole(pangoChefId, ROLES.DEFAULT_ADMIN_ROLE, multisigAddress);
 
-    await renounceRole(pangoChefId, ROLES.FUNDER_ROLE, myAccountAddress);
+    // await renounceRole(pangoChefId, ROLES.FUNDER_ROLE, myAccountAddress);  // TODO: implement pangoChefRewardFundingForwarderAddress. fund via EOA for now
     await renounceRole(pangoChefId, ROLES.POOL_MANAGER_ROLE, myAccountAddress);
     await renounceRole(pangoChefId, ROLES.DEFAULT_ADMIN_ROLE, myAccountAddress);
 
@@ -343,13 +338,12 @@ async function main() {
      * STAKING POSITIONS ROLES *
      ************************* */
 
-    // TODO: deploy FeeCollector
-    // await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, feeCollectorAddress);
+    // await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, feeCollectorAddress); // TODO: implement FeeCollector
     await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, myAccountAddress); // TODO: implement pangoChefRewardFundingForwarderAddress. fund via EOA for now
     await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, multisigAddress);
     await grantRole(pangolinStakingPositionsId, ROLES.DEFAULT_ADMIN_ROLE, multisigAddress);
 
-    await renounceRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, myAccountAddress);
+    // await renounceRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, myAccountAddress); // TODO: implement pangoChefRewardFundingForwarderAddress. fund via EOA for now
     await renounceRole(pangolinStakingPositionsId, ROLES.DEFAULT_ADMIN_ROLE, myAccountAddress);
 
 
@@ -376,7 +370,7 @@ async function grantRole(contractId, roleHash, accountAddress) {
                 .addBytes32(ethers.utils.arrayify(roleHash))
                 .addAddress(accountAddress)
         )
-        .setGas(32_000)
+        .setGas(34_000)
         .execute(client);
     const grantRoleRx = await grantRoleTx.getReceipt(client);
     console.log(`Role granted`);
@@ -390,7 +384,7 @@ async function renounceRole(contractId, roleHash, accountAddress) {
                 .addBytes32(ethers.utils.arrayify(roleHash))
                 .addAddress(accountAddress)
         )
-        .setGas(32_000)
+        .setGas(48_000)
         .execute(client);
     const renounceRoleRx = await renounceRoleTx.getReceipt(client);
     console.log(`Role renounced`);
