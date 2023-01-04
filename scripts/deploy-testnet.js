@@ -9,7 +9,8 @@ const {
     ContractFunctionParameters,
     ContractCallQuery,
     AccountBalanceQuery,
-    ContractExecuteTransaction
+    ContractExecuteTransaction,
+    TokenAssociateTransaction,
 } = require('@hashgraph/sdk');
 require('dotenv').config({path: '../.env'});
 
@@ -29,6 +30,7 @@ async function main() {
     // Optional environment variables
     const FACTORY_CONTRACT_ID = process.env.FACTORY_CONTRACT_ID;
     const WHBAR_CONTRACT_ID = process.env.WHBAR_CONTRACT_ID;
+    const START_VESTING = process.env.START_VESTING;
 
     client = Client.forTestnet();
     client.setOperator(MY_ACCOUNT_ID, MY_PRIVATE_KEY);
@@ -155,8 +157,9 @@ async function main() {
         .setGas(1_900_000) // 1,893,647
         .setPayableAmount(new Hbar(40))
         .execute(client);
-    const createFirstPairRx = await createFirstPairTx.getReceipt(client);
-    console.log(`PNG/WHBAR pair created`);
+    const createFirstPairRx = await createFirstPairTx.getRecord(client);
+    const firstPairAddress = `0x${createFirstPairRx.contractFunctionResult.getAddress(0)}`;
+    console.log(`PNG/WHBAR pair created: ${firstPairAddress}`);
 
     // PangoChef
     const createPangoChefTx = await new ContractCreateFlow()
@@ -176,18 +179,18 @@ async function main() {
     console.log(`PangoChef: ${pangoChefAddress}`);
 
     // RewardFundingForwarder (PangoChef)
-    // const createPangoChefRewardFundingForwarderTx = await new ContractCreateFlow()
-    //     .setBytecode(rewardFundingForwarderContract.bytecode)
-    //     .setConstructorParameters(
-    //         new ContractFunctionParameters()
-    //             .addAddress(pangoChefAddress) // pangoChef
-    //     )
-    //     .setGas(1_200_000)
-    //     .execute(client);
-    // const createPangoChefRewardFundingForwarderRx = await createPangoChefRewardFundingForwarderTx.getReceipt(client);
-    // const pangoChefRewardFundingForwarderId = createPangoChefRewardFundingForwarderRx.contractId;
-    // const pangoChefRewardFundingForwarderAddress = `0x${AccountId.fromString(pangoChefRewardFundingForwarderId).toSolidityAddress()}`;
-    // console.log(`RewardFundingForwarder (PangoChef): ${pangoChefRewardFundingForwarderAddress}`);
+    const createPangoChefRewardFundingForwarderTx = await new ContractCreateFlow()
+        .setBytecode(rewardFundingForwarderContract.bytecode)
+        .setConstructorParameters(
+            new ContractFunctionParameters()
+                .addAddress(pangoChefAddress) // pangoChef
+        )
+        .setGas(900_000)
+        .execute(client);
+    const createPangoChefRewardFundingForwarderRx = await createPangoChefRewardFundingForwarderTx.getReceipt(client);
+    const pangoChefRewardFundingForwarderId = createPangoChefRewardFundingForwarderRx.contractId;
+    const pangoChefRewardFundingForwarderAddress = `0x${AccountId.fromString(pangoChefRewardFundingForwarderId).toSolidityAddress()}`;
+    console.log(`RewardFundingForwarder (PangoChef): ${pangoChefRewardFundingForwarderAddress}`);
 
     // PangolinStakingPositions
     const createPangolinStakingPositionsTx = await new ContractCreateFlow()
@@ -206,23 +209,39 @@ async function main() {
     console.log(`PangolinStakingPositions: ${pangolinStakingPositionsAddress}`);
 
     // RewardFundingForwarder (PangolinStakingPositions)
-    // const createPangolinStakingPositionsRewardFundingForwarderTx = await new ContractCreateFlow()
-    //     .setBytecode(rewardFundingForwarderContract.bytecode)
-    //     .setConstructorParameters(
-    //         new ContractFunctionParameters()
-    //             .addAddress(pangolinStakingPositionsAddress) // pangolinStakingPositions
-    //     )
-    //     .setGas(1_000_000)
-    //     .execute(client);
-    // const createPangolinStakingPositionsRewardFundingForwarderRx = await createPangolinStakingPositionsRewardFundingForwarderTx.getReceipt(client);
-    // const pangolinStakingPositionsRewardFundingForwarderId = createPangolinStakingPositionsRewardFundingForwarderRx.contractId;
-    // const pangolinStakingPositionsRewardFundingForwarderAddress = `0x${AccountId.fromString(pangolinStakingPositionsRewardFundingForwarderId).toSolidityAddress()}`;
-    // console.log(`RewardFundingForwarder (PangolinStakingPositions): ${pangolinStakingPositionsRewardFundingForwarderAddress}`);
+    const createPangolinStakingPositionsRewardFundingForwarderTx = await new ContractCreateFlow()
+        .setBytecode(rewardFundingForwarderContract.bytecode)
+        .setConstructorParameters(
+            new ContractFunctionParameters()
+                .addAddress(pangolinStakingPositionsAddress) // pangolinStakingPositions
+        )
+        .setGas(900_000)
+        .execute(client);
+    const createPangolinStakingPositionsRewardFundingForwarderRx = await createPangolinStakingPositionsRewardFundingForwarderTx.getReceipt(client);
+    const pangolinStakingPositionsRewardFundingForwarderId = createPangolinStakingPositionsRewardFundingForwarderRx.contractId;
+    const pangolinStakingPositionsRewardFundingForwarderAddress = `0x${AccountId.fromString(pangolinStakingPositionsRewardFundingForwarderId).toSolidityAddress()}`;
+    console.log(`RewardFundingForwarder (PangolinStakingPositions): ${pangolinStakingPositionsRewardFundingForwarderAddress}`);
 
     // TODO: Deploy Airdrop
     // TODO: Deploy FeeCollector
     
     console.log('=============== CONFIGURATION ===============');
+
+    const approvePangoChefRewardFundingForwarderTx = await new ContractExecuteTransaction()
+        .setContractId(pangoChefRewardFundingForwarderId)
+        .setFunction('approve')
+        .setGas(800_000)
+        .execute(client);
+    const approvePangoChefRewardFundingForwarderRx = await approvePangoChefRewardFundingForwarderTx.getReceipt(client);
+    console.log(`Setup approval for RewardFundingForwarder (PangoChef)`);
+
+    const approvePangolinStakingPositionsRewardFundingForwarderTx = await new ContractExecuteTransaction()
+        .setContractId(pangolinStakingPositionsRewardFundingForwarderId)
+        .setFunction('approve')
+        .setGas(800_000)
+        .execute(client);
+    const approvePangolinStakingPositionsRewardFundingForwarderRx = await approvePangolinStakingPositionsRewardFundingForwarderTx.getReceipt(client);
+    console.log(`Setup approval for RewardFundingForwarder (PangolinStakingPositions)`);
 
     const VESTER_ALLOCATIONS = [
         {
@@ -237,7 +256,7 @@ async function main() {
         },
         {
             // Chef
-            address: myAccountAddress, // TODO: implement pangoChefRewardFundingForwarderAddress. vest to EOA for now
+            address: pangoChefRewardFundingForwarderAddress,
             allocation: 6053, // 57.5% LPs & PNG Staking
         }
     ];
@@ -256,16 +275,38 @@ async function main() {
     const setRecipientsRx = await setRecipientsTx.getReceipt(client);
     console.log(`Treasury vester recipients set`);
 
+    if (START_VESTING?.toLowerCase() === 'true') {
+        const unpauseTreasuryVesterTx = await new ContractExecuteTransaction()
+            .setContractId(treasuryVesterId)
+            .setFunction('unpause')
+            .setGas(32_000) // 27,120
+            .execute(client);
+        const unpauseTreasuryVesterRx = await unpauseTreasuryVesterTx.getReceipt(client);
+        console.log(`Vesting un-paused`);
+    }
+
+    // TODO: Remove this association. Only needed because we call transferInitialSupplyTx() to ourselves
+    const associateTx = await new TokenAssociateTransaction()
+        .setTokenIds([AccountId.fromSolidityAddress(pngHTSAddress).toString()])
+        .setAccountId(AccountId.fromSolidityAddress(myAccountAddress).toString())
+        .execute(client);
+    const associateRx = await associateTx.getReceipt(client);
+    console.log(`Associated PNG with EOA`);
+
+    const transferInitialSupplyTx = await new ContractExecuteTransaction()
+        .setContractId(treasuryVesterId)
+        .setFunction('transferInitialSupply',
+            new ContractFunctionParameters()
+                .addAddress(myAccountAddress) // TODO: send to airdrop instead. sending to EOA for testing now
+        )
+        .setGas(100_000)
+        .execute(client);
+    const transferInitialSupplyRx = await transferInitialSupplyTx.getReceipt(client);
+    console.log(`Vesting un-paused`);
 
     // await airdrop.setMerkleRoot(AIRDROP_MERKLE_ROOT);
     // console.log('Set airdrop merkle root.');
-    //
-    // if (START_VESTING) {
-    //     await airdrop.unpause();
-    //     await confirmTransactionCount();
-    //     console.log('Unpaused airdrop claiming.');
-    // }
-    //
+
     // await airdrop.transferOwnership(multisigAddress);
     // console.log('Transferred airdrop ownership to multisig.');
     //
@@ -301,11 +342,6 @@ async function main() {
     //     'to Multisig.'
     // );
     //
-    // if (START_VESTING) {
-    //     await vester.startVesting();
-    //     console.log('Token vesting began.');
-    // }
-    //
     // await vester.transferOwnership(timelock.address);
     // console.log('Transferred TreasuryVester ownership to Timelock.');
 
@@ -318,32 +354,27 @@ async function main() {
         .setGas(25_000) // 23,601
         .execute(client);
     const setFeeToSetterRx = await setFeeToSetterTx.getReceipt(client);
-    console.log('Transferred PangolinFactory ownership to Multisig.');
+    console.log('Transferred PangolinFactory ownership to Multisig');
 
+    console.log('=============== PANGOCHEF ROLES ===============');
 
-    /*******************
-     * PANGOCHEF ROLES *
-     *******************/
-
-    await grantRole(pangoChefId, ROLES.FUNDER_ROLE, myAccountAddress); // TODO: implement pangoChefRewardFundingForwarderAddress. fund via EOA for now
+    await grantRole(pangoChefId, ROLES.FUNDER_ROLE, pangoChefRewardFundingForwarderAddress);
     await grantRole(pangoChefId, ROLES.FUNDER_ROLE, multisigAddress);
     await grantRole(pangoChefId, ROLES.POOL_MANAGER_ROLE, multisigAddress);
     await grantRole(pangoChefId, ROLES.DEFAULT_ADMIN_ROLE, multisigAddress);
 
-    // await renounceRole(pangoChefId, ROLES.FUNDER_ROLE, myAccountAddress);  // TODO: implement pangoChefRewardFundingForwarderAddress. fund via EOA for now
+    await renounceRole(pangoChefId, ROLES.FUNDER_ROLE, myAccountAddress);
     await renounceRole(pangoChefId, ROLES.POOL_MANAGER_ROLE, myAccountAddress);
     await renounceRole(pangoChefId, ROLES.DEFAULT_ADMIN_ROLE, myAccountAddress);
 
-    /************************* *
-     * STAKING POSITIONS ROLES *
-     ************************* */
+    console.log('=============== STAKING POSITIONS ROLES ===============');
 
     // await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, feeCollectorAddress); // TODO: implement FeeCollector
-    await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, myAccountAddress); // TODO: implement pangoChefRewardFundingForwarderAddress. fund via EOA for now
+    await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, pangolinStakingPositionsRewardFundingForwarderAddress);
     await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, multisigAddress);
     await grantRole(pangolinStakingPositionsId, ROLES.DEFAULT_ADMIN_ROLE, multisigAddress);
 
-    // await renounceRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, myAccountAddress); // TODO: implement pangoChefRewardFundingForwarderAddress. fund via EOA for now
+    await renounceRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, myAccountAddress);
     await renounceRole(pangolinStakingPositionsId, ROLES.DEFAULT_ADMIN_ROLE, myAccountAddress);
 
 
@@ -370,7 +401,7 @@ async function grantRole(contractId, roleHash, accountAddress) {
                 .addBytes32(ethers.utils.arrayify(roleHash))
                 .addAddress(accountAddress)
         )
-        .setGas(34_000)
+        .setGas(200_000) // wtf
         .execute(client);
     const grantRoleRx = await grantRoleTx.getReceipt(client);
     console.log(`Role granted`);
@@ -384,7 +415,7 @@ async function renounceRole(contractId, roleHash, accountAddress) {
                 .addBytes32(ethers.utils.arrayify(roleHash))
                 .addAddress(accountAddress)
         )
-        .setGas(48_000)
+        .setGas(200_000) // wtf
         .execute(client);
     const renounceRoleRx = await renounceRoleTx.getReceipt(client);
     console.log(`Role renounced`);
