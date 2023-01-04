@@ -2,6 +2,8 @@
 pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "../hts-precompile/HederaResponseCodes.sol";
+import "../hts-precompile/HederaTokenService.sol";
 
 interface IPangoChef {
     function rewardsToken() external view returns (address);
@@ -13,6 +15,7 @@ interface IPangoChef {
 
 /**
  * @author shung for Pangolin
+ * @author bmino for Pangolin
  * @notice
  *
  * Funder -> RewardFundingForwarder -> PangoChef
@@ -22,9 +25,10 @@ interface IPangoChef {
  * Funder is any contract that was written for Synthetix' StakingRewards, or for MiniChef.
  * RewardFundingForwarder provides compatibility for these old funding contracts.
  */
-contract RewardFundingForwarder {
+contract RewardFundingForwarder is HederaTokenService {
     IPangoChef public immutable pangoChef;
     address public immutable rewardsToken;
+    uint256 private immutable TOKEN_MAX_SUPPLY;
     bytes32 private constant FUNDER_ROLE = keccak256("FUNDER_ROLE");
 
     modifier onlyFunder() {
@@ -35,9 +39,21 @@ contract RewardFundingForwarder {
     constructor(address newPangoChef) {
         require(newPangoChef.code.length != 0, "empty contract");
         address newRewardsToken = IPangoChef(newPangoChef).rewardsToken();
-        IERC20(newRewardsToken).approve(newPangoChef, type(uint256).max);
+
+        (int responseCode, IHederaTokenService.FungibleTokenInfo memory tokenInfo) = HederaTokenService.getFungibleTokenInfo(newRewardsToken);
+        require(responseCode == HederaResponseCodes.SUCCESS, "Token info request failed");
+
+        responseCode = HederaTokenService.associateToken(address(this), newRewardsToken);
+        require(responseCode == HederaResponseCodes.SUCCESS, "Association failed");
+
+        TOKEN_MAX_SUPPLY = uint256(uint64(tokenInfo.tokenInfo.token.maxSupply));
         pangoChef = IPangoChef(newPangoChef);
         rewardsToken = newRewardsToken;
+    }
+
+    function approve() external {
+        int responseCode = HederaTokenService.approve(rewardsToken, address(pangoChef), TOKEN_MAX_SUPPLY);
+        require(responseCode == HederaResponseCodes.SUCCESS, "Approval failed");
     }
 
     function notifyRewardAmount(uint256 amount) external onlyFunder {
