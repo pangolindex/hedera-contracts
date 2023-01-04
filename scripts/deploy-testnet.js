@@ -42,6 +42,7 @@ async function main() {
     const wrappedNativeTokenContract = await ethers.getContractFactory('WHBAR');
     const treasuryVesterContract = await ethers.getContractFactory('TreasuryVester');
     const pangolinFactoryContract = await ethers.getContractFactory('PangolinFactory');
+    const pangolinRouterContract = await ethers.getContractFactory('PangolinRouter');
     const pangolinPairContract = await ethers.getContractFactory('PangolinPair');
     const pangolinPairInitHash = ethers.utils.keccak256(pangolinPairContract.bytecode);
     const pangoChefContract = await ethers.getContractFactory('PangoChef');
@@ -79,7 +80,7 @@ async function main() {
         .setGas(24_000) // 21,204
         .setFunction('TOKEN_ID')
         .execute(client);
-    const wrappedNativeTokenHTSAddress = whbarQueryTx.getAddress(0);
+    const wrappedNativeTokenHTSAddress = `0x${whbarQueryTx.getAddress(0)}`;
     console.log(`WHBAR (HTS): ${wrappedNativeTokenHTSAddress}`);
 
     // TreasuryVester
@@ -103,7 +104,7 @@ async function main() {
         .setGas(24_000) // 21,284
         .setFunction('PNG')
         .execute(client);
-    const pngHTSAddress = pngQueryTx.getAddress(0);
+    const pngHTSAddress = `0x${pngQueryTx.getAddress(0)}`;
     console.log(`PNG (HTS): ${pngHTSAddress}`);
 
     // Multisig
@@ -133,13 +134,13 @@ async function main() {
 
     // PangolinRouter
     const createPangolinRouterTx = await new ContractCreateFlow()
-        .setBytecode(pangolinFactoryContract.bytecode)
+        .setBytecode(pangolinRouterContract.bytecode)
         .setConstructorParameters(
             new ContractFunctionParameters()
                 .addAddress(pangolinFactoryAddress) // factory
                 .addAddress(wrappedNativeTokenContractAddress) // whbar
         )
-        .setGas(80_000) // 78,476
+        .setGas(900_000) // 765,518
         .execute(client);
     const createPangolinRouterRx = await createPangolinRouterTx.getReceipt(client);
     const pangolinRouterId = createPangolinRouterRx.contractId;
