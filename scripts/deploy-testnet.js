@@ -40,6 +40,7 @@ async function main() {
     console.log(`Deployer: ${myAccountAddress}`);
 
     const wrappedNativeTokenContract = await ethers.getContractFactory('WHBAR');
+    const communityTreasury = await ethers.getContractFactory('CommunityTreasury');
     const treasuryVesterContract = await ethers.getContractFactory('TreasuryVester');
     const pangolinFactoryContract = await ethers.getContractFactory('PangolinFactory');
     const pangolinRouterContract = await ethers.getContractFactory('PangolinRouter');
@@ -110,6 +111,20 @@ async function main() {
     // Multisig
     const multisigAddress = `0x${AccountId.fromString(MULTISIG_ACCOUNT_ID).toSolidityAddress()}`;
     console.log(`Multisig: ${multisigAddress}`);
+
+    // CommunityTreasury
+    const createCommunityTreasuryTx = await new ContractCreateFlow()
+        .setBytecode(communityTreasury.bytecode)
+        .setConstructorParameters(
+            new ContractFunctionParameters()
+                .addAddress(pngHTSAddress)
+        )
+        .setGas(900_000) // 788,308
+        .execute(client);
+    const createCommunityTreasuryRx = await createCommunityTreasuryTx.getReceipt(client);
+    const communityTreasuryId = createCommunityTreasuryRx.contractId;
+    const communityTreasuryAddress = `0x${AccountId.fromString(communityTreasuryId).toSolidityAddress()}`;
+    console.log(`CommunityTreasury: ${communityTreasuryAddress}`);
 
     // PangolinFactory
     let pangolinFactoryId;
@@ -247,7 +262,7 @@ async function main() {
     const VESTER_ALLOCATIONS = [
         {
             // Community Treasury
-            address: multisigAddress, // TODO: implement treasury. vest to multisig for now
+            address: communityTreasuryAddress,
             allocation: 2105, // 20%
         },
         {
@@ -271,7 +286,7 @@ async function main() {
                 .addAddressArray(vesterAccounts) // accounts
                 .addInt64Array(vesterAllocations) // allocations
         )
-        .setGas(125_000) // 120,821
+        .setGas(130_000) // 120,821
         .execute(client);
     const setRecipientsRx = await setRecipientsTx.getReceipt(client);
     console.log(`Treasury vester recipients set`);
@@ -310,9 +325,6 @@ async function main() {
 
     // await airdrop.transferOwnership(multisigAddress);
     // console.log('Transferred airdrop ownership to multisig.');
-    //
-    // await treasury.transferOwnership(timelock.address);
-    // console.log('Transferred CommunityTreasury ownership to Timelock.');
     //
     // await png.grantRole(MINTER_ROLE, vester.address);
     // console.log('Gave PNG minting role to TreasuryVester.');
@@ -356,6 +368,17 @@ async function main() {
         .execute(client);
     const setFeeToSetterRx = await setFeeToSetterTx.getReceipt(client);
     console.log('Transferred PangolinFactory ownership to Multisig');
+
+    const transferOwnershipCommunityTreasuryTx = await new ContractExecuteTransaction()
+        .setContractId(communityTreasuryId)
+        .setFunction('transferOwnership',
+            new ContractFunctionParameters()
+                .addAddress(multisigAddress) // TODO: Transfer ownership to Governance
+        )
+        .setGas(35_000)
+        .execute(client);
+    const transferOwnershipCommunityTreasuryRx = await transferOwnershipCommunityTreasuryTx.getReceipt(client);
+    console.log('Transferred ownership of CommunityTreasury to Multisig');
 
     console.log('=============== PANGOCHEF ROLES ===============');
 
