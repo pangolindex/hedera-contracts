@@ -1,4 +1,6 @@
 const {ethers} = require('hardhat');
+const fs = require('node:fs');
+const path = require('node:path');
 const ROLES = require('./static/roles');
 const {
     Client,
@@ -35,8 +37,8 @@ async function main() {
     client = Client.forTestnet();
     client.setOperator(MY_ACCOUNT_ID, MY_PRIVATE_KEY);
 
+    const deployment = {};
     const myAccountAddress = `0x${AccountId.fromString(MY_ACCOUNT_ID).toSolidityAddress()}`;
-
     console.log(`Deployer: ${myAccountAddress}`);
 
     const wrappedNativeTokenContract = await ethers.getContractFactory('WHBAR');
@@ -74,6 +76,7 @@ async function main() {
         wrappedNativeTokenContractAddress = `0x${AccountId.fromString(WHBAR_CONTRACT_ID).toSolidityAddress()}`;
     }
     console.log(`WHBAR (Contract): ${wrappedNativeTokenContractAddress}`);
+    deployment['WHBAR (Contract)'] = wrappedNativeTokenContractAddress;
 
     // WHBAR HTS Address
     const whbarQueryTx = await new ContractCallQuery()
@@ -83,6 +86,7 @@ async function main() {
         .execute(client);
     const wrappedNativeTokenHTSAddress = `0x${whbarQueryTx.getAddress(0)}`;
     console.log(`WHBAR (HTS): ${wrappedNativeTokenHTSAddress}`);
+    deployment['WHBAR (HTS)'] = wrappedNativeTokenHTSAddress;
 
     // TreasuryVester
     const createTreasuryVesterTx = await new ContractCreateFlow()
@@ -98,6 +102,7 @@ async function main() {
     const treasuryVesterId = createTreasuryVesterRx.contractId;
     const treasuryVesterAddress = `0x${AccountId.fromString(treasuryVesterId).toSolidityAddress()}`;
     console.log(`TreasuryVester: ${treasuryVesterAddress}`);
+    deployment['TreasuryVester'] = treasuryVesterAddress;
 
     // PNG HTS Information
     const pngQueryTx = await new ContractCallQuery()
@@ -107,10 +112,12 @@ async function main() {
         .execute(client);
     const pngHTSAddress = `0x${pngQueryTx.getAddress(0)}`;
     console.log(`PNG (HTS): ${pngHTSAddress}`);
+    deployment['PNG (HTS)'] = pngHTSAddress;
 
     // Multisig
     const multisigAddress = `0x${AccountId.fromString(MULTISIG_ACCOUNT_ID).toSolidityAddress()}`;
     console.log(`Multisig: ${multisigAddress}`);
+    deployment['Multisig'] = multisigAddress;
 
     // CommunityTreasury
     const createCommunityTreasuryTx = await new ContractCreateFlow()
@@ -125,6 +132,7 @@ async function main() {
     const communityTreasuryId = createCommunityTreasuryRx.contractId;
     const communityTreasuryAddress = `0x${AccountId.fromString(communityTreasuryId).toSolidityAddress()}`;
     console.log(`CommunityTreasury: ${communityTreasuryAddress}`);
+    deployment['CommunityTreasury'] = communityTreasuryAddress;
 
     // PangolinFactory
     let pangolinFactoryId;
@@ -146,6 +154,7 @@ async function main() {
         pangolinFactoryAddress = `0x${AccountId.fromString(pangolinFactoryId).toSolidityAddress()}`;
     }
     console.log(`PangolinFactory: ${pangolinFactoryAddress}`);
+    deployment['PangolinFactory'] = pangolinFactoryAddress;
 
     // PangolinRouter
     const createPangolinRouterTx = await new ContractCreateFlow()
@@ -161,6 +170,7 @@ async function main() {
     const pangolinRouterId = createPangolinRouterRx.contractId;
     const pangolinRouterAddress = `0x${AccountId.fromString(pangolinRouterId).toSolidityAddress()}`;
     console.log(`PangolinRouter: ${pangolinRouterAddress}`);
+    deployment['PangolinRouter'] = pangolinRouterAddress;
 
     // Create PNG/WHBAR as first pair (required for PangolinFactory creation)
     const createFirstPairTx = await new ContractExecuteTransaction()
@@ -175,7 +185,8 @@ async function main() {
         .execute(client);
     const createFirstPairRx = await createFirstPairTx.getRecord(client);
     const firstPairAddress = `0x${createFirstPairRx.contractFunctionResult.getAddress(0)}`;
-    console.log(`PNG/WHBAR pair created: ${firstPairAddress}`);
+    console.log(`Pair PNG/WHBAR (Contract): ${firstPairAddress}`);
+    deployment['Pair PNG/WHBAR (Contract)'] = firstPairAddress;
 
     // PangoChef
     const createPangoChefTx = await new ContractCreateFlow()
@@ -193,6 +204,7 @@ async function main() {
     const pangoChefId = createPangoChefRx.contractId;
     const pangoChefAddress = `0x${AccountId.fromString(pangoChefId).toSolidityAddress()}`;
     console.log(`PangoChef: ${pangoChefAddress}`);
+    deployment['PangoChef'] = pangoChefAddress;
 
     // RewardFundingForwarder (PangoChef)
     const createPangoChefRewardFundingForwarderTx = await new ContractCreateFlow()
@@ -207,6 +219,7 @@ async function main() {
     const pangoChefRewardFundingForwarderId = createPangoChefRewardFundingForwarderRx.contractId;
     const pangoChefRewardFundingForwarderAddress = `0x${AccountId.fromString(pangoChefRewardFundingForwarderId).toSolidityAddress()}`;
     console.log(`RewardFundingForwarder (PangoChef): ${pangoChefRewardFundingForwarderAddress}`);
+    deployment['RewardFundingForwarder (PangoChef)'] = pangoChefRewardFundingForwarderAddress;
 
     // PangolinStakingPositions
     const createPangolinStakingPositionsTx = await new ContractCreateFlow()
@@ -223,6 +236,7 @@ async function main() {
     const pangolinStakingPositionsId = createPangolinStakingPositionsRx.contractId;
     const pangolinStakingPositionsAddress = `0x${AccountId.fromString(pangolinStakingPositionsId).toSolidityAddress()}`;
     console.log(`PangolinStakingPositions: ${pangolinStakingPositionsAddress}`);
+    deployment['PangolinStakingPositions'] = pangolinStakingPositionsAddress;
 
     // RewardFundingForwarder (PangolinStakingPositions)
     const createPangolinStakingPositionsRewardFundingForwarderTx = await new ContractCreateFlow()
@@ -237,6 +251,7 @@ async function main() {
     const pangolinStakingPositionsRewardFundingForwarderId = createPangolinStakingPositionsRewardFundingForwarderRx.contractId;
     const pangolinStakingPositionsRewardFundingForwarderAddress = `0x${AccountId.fromString(pangolinStakingPositionsRewardFundingForwarderId).toSolidityAddress()}`;
     console.log(`RewardFundingForwarder (PangolinStakingPositions): ${pangolinStakingPositionsRewardFundingForwarderAddress}`);
+    deployment['RewardFundingForwarder (PangolinStakingPositions)'] = pangolinStakingPositionsRewardFundingForwarderAddress;
 
     // TODO: Deploy Airdrop
     // TODO: Deploy FeeCollector
@@ -387,9 +402,14 @@ async function main() {
     await grantRole(pangoChefId, ROLES.POOL_MANAGER_ROLE, multisigAddress);
     await grantRole(pangoChefId, ROLES.DEFAULT_ADMIN_ROLE, multisigAddress);
 
-    await renounceRole(pangoChefId, ROLES.FUNDER_ROLE, myAccountAddress);
-    await renounceRole(pangoChefId, ROLES.POOL_MANAGER_ROLE, myAccountAddress);
-    await renounceRole(pangoChefId, ROLES.DEFAULT_ADMIN_ROLE, myAccountAddress);
+    // Leave permissions to the deployer if a multisig doesn't exist
+    if (multisigAddress === myAccountAddress) {
+        console.log(`Keeping PangoChef roles to deployer`);
+    } else {
+        await renounceRole(pangoChefId, ROLES.FUNDER_ROLE, myAccountAddress);
+        await renounceRole(pangoChefId, ROLES.POOL_MANAGER_ROLE, myAccountAddress);
+        await renounceRole(pangoChefId, ROLES.DEFAULT_ADMIN_ROLE, myAccountAddress);
+    }
 
     console.log('=============== STAKING POSITIONS ROLES ===============');
 
@@ -398,9 +418,15 @@ async function main() {
     await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, multisigAddress);
     await grantRole(pangolinStakingPositionsId, ROLES.DEFAULT_ADMIN_ROLE, multisigAddress);
 
-    await renounceRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, myAccountAddress);
-    await renounceRole(pangolinStakingPositionsId, ROLES.DEFAULT_ADMIN_ROLE, myAccountAddress);
+    // Leave permissions to the deployer if a multisig doesn't exist
+    if (multisigAddress === myAccountAddress) {
+        console.log(`Keeping PangolinStakingPositions roles to deployer`);
+    } else {
+        await renounceRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, myAccountAddress);
+        await renounceRole(pangolinStakingPositionsId, ROLES.DEFAULT_ADMIN_ROLE, myAccountAddress);
+    }
 
+    fs.writeFileSync(path.join(__dirname, '..', 'deployments', `testnet@${Date.now()}.json`), JSON.stringify(deployment), {encoding: 'utf-8'});
 
     const balanceAfter = await new AccountBalanceQuery()
         .setAccountId(MY_ACCOUNT_ID)
