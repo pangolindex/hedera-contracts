@@ -50,6 +50,7 @@ async function main() {
     const pangolinPairInitHash = ethers.utils.keccak256(pangolinPairContract.bytecode);
     const pangoChefContract = await ethers.getContractFactory('PangoChef');
     const rewardFundingForwarderContract = await ethers.getContractFactory('RewardFundingForwarder');
+    const EmissionDiversionFromPangoChefToPangolinStakingPositions = await ethers.getContractFactory('EmissionDiversionFromPangoChefToPangolinStakingPositions');
     const pangolinStakingPositionsContract = await ethers.getContractFactory('PangolinStakingPositions');
 
     const balanceBefore = await new AccountBalanceQuery()
@@ -253,6 +254,22 @@ async function main() {
     console.log(`RewardFundingForwarder (PangolinStakingPositions): ${pangolinStakingPositionsRewardFundingForwarderAddress}`);
     deployment['RewardFundingForwarder (PangolinStakingPositions)'] = pangolinStakingPositionsRewardFundingForwarderAddress;
 
+    // EmissionDiversionFromPangoChefToPangolinStakingPositions
+    console.log(`Deploying EmissionDiversionFromPangoChefToPangolinStakingPositions ...`);
+    const createEmissionDiversionFromPangoChefToPangolinStakingPositionsTx = await new ContractCreateFlow()
+        .setBytecode(EmissionDiversionFromPangoChefToPangolinStakingPositions.bytecode)
+        .setConstructorParameters(
+            new ContractFunctionParameters()
+                .addAddress(pangoChefAddress)
+                .addAddress(pangolinStakingPositionsAddress)
+        )
+        .setGas(950_000) // 793,453
+        .execute(client);
+    const createEmissionDiversionFromPangoChefToPangolinStakingPositionsRx = await createEmissionDiversionFromPangoChefToPangolinStakingPositionsTx.getReceipt(client);
+    const emissionDiversionFromPangoChefToPangolinStakingPositionsId = createEmissionDiversionFromPangoChefToPangolinStakingPositionsRx.contractId;
+    const emissionDiversionFromPangoChefToPangolinStakingPositionsAddress = `0x${AccountId.fromString(emissionDiversionFromPangoChefToPangolinStakingPositionsId).toSolidityAddress()}`;
+    console.log(`EmissionDiversionFromPangoChefToPangolinStakingPositions ${emissionDiversionFromPangoChefToPangolinStakingPositionsId} (${emissionDiversionFromPangoChefToPangolinStakingPositionsAddress})`);
+
     // TODO: Deploy Airdrop
     // TODO: Deploy FeeCollector
     
@@ -261,7 +278,7 @@ async function main() {
     const approvePangoChefRewardFundingForwarderTx = await new ContractExecuteTransaction()
         .setContractId(pangoChefRewardFundingForwarderId)
         .setFunction('approve')
-        .setGas(800_000)
+        .setGas(900_000)
         .execute(client);
     const approvePangoChefRewardFundingForwarderRx = await approvePangoChefRewardFundingForwarderTx.getReceipt(client);
     console.log(`Setup approval for RewardFundingForwarder (PangoChef)`);
@@ -269,10 +286,17 @@ async function main() {
     const approvePangolinStakingPositionsRewardFundingForwarderTx = await new ContractExecuteTransaction()
         .setContractId(pangolinStakingPositionsRewardFundingForwarderId)
         .setFunction('approve')
-        .setGas(800_000)
+        .setGas(900_000)
         .execute(client);
     const approvePangolinStakingPositionsRewardFundingForwarderRx = await approvePangolinStakingPositionsRewardFundingForwarderTx.getReceipt(client);
-    console.log(`Setup approval for RewardFundingForwarder (PangolinStakingPositions)`);
+
+    const approveEmissionDiversionFromPangoChefToPangolinStakingPositionsTx = await new ContractExecuteTransaction()
+        .setContractId(emissionDiversionFromPangoChefToPangolinStakingPositionsId)
+        .setFunction('approve')
+        .setGas(900_000) // 732,126
+        .execute(client);
+    const approvalRx = await approveEmissionDiversionFromPangoChefToPangolinStakingPositionsTx.getReceipt(client);
+    console.log(`Setup approval for EmissionDiversionFromPangoChefToPangolinStakingPositions`);
 
     const VESTER_ALLOCATIONS = [
         {
@@ -316,13 +340,15 @@ async function main() {
         console.log(`Vesting un-paused`);
     }
 
-    // TODO: Remove this association. Only needed because we call transferInitialSupplyTx() to ourselves
-    const associateTx = await new TokenAssociateTransaction()
-        .setTokenIds([AccountId.fromSolidityAddress(pngHTSAddress).toString()])
-        .setAccountId(AccountId.fromSolidityAddress(myAccountAddress).toString())
-        .execute(client);
-    const associateRx = await associateTx.getReceipt(client);
-    console.log(`Associated PNG with EOA`);
+    if (multisigAddress === myAccountAddress) {
+        // Only needed if we call transferInitialSupplyTx() to ourselves vs a multisig. Probably useful nonetheless
+        const associateTx = await new TokenAssociateTransaction()
+            .setTokenIds([AccountId.fromSolidityAddress(pngHTSAddress).toString()])
+            .setAccountId(AccountId.fromSolidityAddress(myAccountAddress).toString())
+            .execute(client);
+        const associateRx = await associateTx.getReceipt(client);
+        console.log(`Associated PNG with deployer EOA`);
+    }
 
     const transferInitialSupplyTx = await new ContractExecuteTransaction()
         .setContractId(treasuryVesterId)
