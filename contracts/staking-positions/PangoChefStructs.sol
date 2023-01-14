@@ -37,11 +37,13 @@ struct UserPool {
     uint152 previousValues;
     // The last time the user info was updated.
     uint48 lastUpdate;
-    // When a user uses the rewards of a pool to compound into pool zero, the pool zero gets
-    // locked until that pool has its staking duration reset. Otherwise people can exploit
-    // the `compoundToPoolZero()` function to harvest rewards of a pool without resetting its
-    // staking duration, which would defeat the purpose of using SAR algorithm.
-    bool isLockingPoolZero;
+    // The number of pools that locked this pool. User can only withdraw from a pool if its
+    // lock count is zero. When a user uses the rewards of a pool to compound into another
+    // pool, the compounded pool gets locked until the harvested pool has its staking duration
+    // reset. Otherwise people can exploit the `compoundTo()` function to harvest rewards of a
+    // pool without resetting its staking duration, which would defeat the purpose of using SAR
+    // algorithm.
+    uint56 lockCount;
     // Last timestamps of low-level call fails, so Rewarder can slash rewards.
     uint48 lastTimeRewarderCallFailed;
     // Rewards of the user gets stashed when user’s summations are updated without
