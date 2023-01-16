@@ -10,12 +10,10 @@ abstract contract HederaTokenService is HederaResponseCodes {
     // 90 days in seconds
     uint32 constant defaultAutoRenewPeriod = 7776000;
 
-    modifier nonEmptyExpiry(IHederaTokenService.HederaToken memory token)
-    {
+    function nonEmptyExpiry(IHederaTokenService.HederaToken memory token) internal pure {
         if (token.expiry.second == 0 && token.expiry.autoRenewPeriod == 0) {
             token.expiry.autoRenewPeriod = defaultAutoRenewPeriod;
         }
-        _;
     }
 
     /// Initiates a Token Transfer
@@ -146,8 +144,9 @@ abstract contract HederaTokenService is HederaResponseCodes {
     function createFungibleToken(
         IHederaTokenService.HederaToken memory token,
         uint64 initialTotalSupply,
-        uint32 decimals) nonEmptyExpiry(token)
+        uint32 decimals)
     internal returns (int responseCode, address tokenAddress) {
+        nonEmptyExpiry(token);
         (bool success, bytes memory result) = precompileAddress.call{value : msg.value}(
             abi.encodeWithSelector(IHederaTokenService.createFungibleToken.selector,
             token, initialTotalSupply, decimals));
@@ -170,8 +169,9 @@ abstract contract HederaTokenService is HederaResponseCodes {
         uint64 initialTotalSupply,
         uint32 decimals,
         IHederaTokenService.FixedFee[] memory fixedFees,
-        IHederaTokenService.FractionalFee[] memory fractionalFees) nonEmptyExpiry(token)
+        IHederaTokenService.FractionalFee[] memory fractionalFees)
     internal returns (int responseCode, address tokenAddress) {
+        nonEmptyExpiry(token);
         (bool success, bytes memory result) = precompileAddress.call{value : msg.value}(
             abi.encodeWithSelector(IHederaTokenService.createFungibleTokenWithCustomFees.selector,
             token, initialTotalSupply, decimals, fixedFees, fractionalFees));
@@ -182,8 +182,9 @@ abstract contract HederaTokenService is HederaResponseCodes {
     /// @param token the basic properties of the token being created
     /// @return responseCode The response code for the status of the request. SUCCESS is 22.
     /// @return tokenAddress the created token's address
-    function createNonFungibleToken(IHederaTokenService.HederaToken memory token) nonEmptyExpiry(token)
+    function createNonFungibleToken(IHederaTokenService.HederaToken memory token)
     internal returns (int responseCode, address tokenAddress) {
+        nonEmptyExpiry(token);
         (bool success, bytes memory result) = precompileAddress.call{value : msg.value}(
             abi.encodeWithSelector(IHederaTokenService.createNonFungibleToken.selector, token));
         (responseCode, tokenAddress) = success ? abi.decode(result, (int32, address)) : (HederaResponseCodes.UNKNOWN, address(0));
@@ -198,8 +199,9 @@ abstract contract HederaTokenService is HederaResponseCodes {
     function createNonFungibleTokenWithCustomFees(
         IHederaTokenService.HederaToken memory token,
         IHederaTokenService.FixedFee[] memory fixedFees,
-        IHederaTokenService.RoyaltyFee[] memory royaltyFees) nonEmptyExpiry(token)
+        IHederaTokenService.RoyaltyFee[] memory royaltyFees)
     internal returns (int responseCode, address tokenAddress) {
+        nonEmptyExpiry(token);
         (bool success, bytes memory result) = precompileAddress.call{value : msg.value}(
             abi.encodeWithSelector(IHederaTokenService.createNonFungibleTokenWithCustomFees.selector,
             token, fixedFees, royaltyFees));
@@ -231,27 +233,6 @@ abstract contract HederaTokenService is HederaResponseCodes {
             abi.encodeWithSelector(IHederaTokenService.getNonFungibleTokenInfo.selector, token, serialNumber));
         IHederaTokenService.NonFungibleTokenInfo memory defaultTokenInfo;
         (responseCode, tokenInfo) = success ? abi.decode(result, (int32, IHederaTokenService.NonFungibleTokenInfo)) : (HederaResponseCodes.UNKNOWN, defaultTokenInfo);
-    }
-
-    /// Query token custom fees
-    /// @param token The token address to check
-    /// @return responseCode The response code for the status of the request. SUCCESS is 22.
-    /// @return fixedFees Set of fixed fees for `token`
-    /// @return fractionalFees Set of fractional fees for `token`
-    /// @return royaltyFees Set of royalty fees for `token`
-    function getTokenCustomFees(address token) internal returns (int64 responseCode,
-        IHederaTokenService.FixedFee[] memory fixedFees,
-        IHederaTokenService.FractionalFee[] memory fractionalFees,
-        IHederaTokenService.RoyaltyFee[] memory royaltyFees) {
-        (bool success, bytes memory result) = precompileAddress.call(
-            abi.encodeWithSelector(IHederaTokenService.getTokenCustomFees.selector, token));
-        IHederaTokenService.FixedFee[] memory defaultFixedFees;
-        IHederaTokenService.FractionalFee[] memory defaultFractionalFees;
-        IHederaTokenService.RoyaltyFee[] memory defaultRoyaltyFees;
-        (responseCode, fixedFees, fractionalFees, royaltyFees) =
-        success ? abi.decode
-        (result, (int32, IHederaTokenService.FixedFee[], IHederaTokenService.FractionalFee[], IHederaTokenService.RoyaltyFee[]))
-        : (HederaResponseCodes.UNKNOWN, defaultFixedFees, defaultFractionalFees, defaultRoyaltyFees);
     }
 
     /// Allows spender to withdraw from your account multiple times, up to the value amount. If this function is called

@@ -308,21 +308,16 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
      * @return user The user struct that contains all the information of the user.
      */
     function getUser(uint256 poolId, address userId) external view returns (UserPool memory user) {
-        address userStorageContract = _getUserStorageContract(userId);
-        if (userStorageContract.code.length != 0)
-            user = PangoChefUserStorage(userStorageContract).userPools(poolId);
+        user = _getUserStorageContract(userId).userPools(poolId);
     }
     function _getUser(uint256 poolId, address userId) private view returns (UserPool memory) {
-        address userStorageContract = _getUserStorageContract(userId);
-        return PangoChefUserStorage(userStorageContract).userPools(poolId);
+        return _getUserStorageContract(userId).userPools(poolId);
     }
     function _setUser(uint256 poolId, address userId, UserPool memory user) private {
-        address userStorageContract = _getUserStorageContract(userId);
-        PangoChefUserStorage(userStorageContract).updateUserPool(poolId, user);
+        _getUserStorageContract(userId).updateUserPool(poolId, user);
     }
     function _deleteUser(uint256 poolId, address userId) private {
-        address userStorageContract = _getUserStorageContract(userId);
-        PangoChefUserStorage(userStorageContract).deleteUserPool(poolId);
+        _getUserStorageContract(userId).deleteUserPool(poolId);
     }
 
     /**
@@ -335,8 +330,7 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
         uint256 poolId,
         address userId
     ) external view returns (uint256[] memory) {
-        address userStorageContract = _getUserStorageContract(userId);
-        return PangoChefUserStorage(userStorageContract).lockedPools(poolId);
+        return _getUserStorageContract(userId).lockedPools(poolId);
     }
 
     /**
@@ -388,8 +382,8 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
         return _poolsLength;
     }
 
-    function getUserStorageContract(address user) external view returns (address) {
-        address userStorageContract = _getUserStorageContract(user);
+    function getUserStorageContract(address userId) external view returns (address) {
+        address userStorageContract = address(_getUserStorageContract(userId));
         return userStorageContract.code.length == 0 ? address(0) : userStorageContract;
     }
 
@@ -403,10 +397,12 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
         );
     }
 
-    function _getUserStorageContract(address user) private view returns (address) {
-        return Create2.computeAddress(
-            bytes32(bytes20(user)),
-            keccak256(type(PangoChefUserStorage).creationCode)
+    function _getUserStorageContract(address userId) private view returns (PangoChefUserStorage) {
+        return PangoChefUserStorage(
+                Create2.computeAddress(
+                    bytes32(bytes20(userId)),
+                    keccak256(type(PangoChefUserStorage).creationCode)
+            )
         );
     }
 
@@ -780,8 +776,7 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
      * @param compoundPoolId The identifier of the pool that the rewards will be compounded to.
      */
     function _incrementLock(uint256 harvestPoolId, uint256 compoundPoolId) private {
-        address userStorageContract = _getUserStorageContract(msg.sender);
-        PangoChefUserStorage(userStorageContract).incrementLock(harvestPoolId, compoundPoolId);
+        _getUserStorageContract(msg.sender).incrementLock(harvestPoolId, compoundPoolId);
     }
 
     /**
@@ -792,8 +787,7 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
      */
     function _decrementLock(UserPool memory user, uint256 withdrawPoolId) private {
         if (user.lockCount != 0) revert Locked();
-        address userStorageContract = _getUserStorageContract(msg.sender);
-        PangoChefUserStorage(userStorageContract).decrementLock(withdrawPoolId);
+        _getUserStorageContract(msg.sender).decrementLock(withdrawPoolId);
     }
 
     /**
