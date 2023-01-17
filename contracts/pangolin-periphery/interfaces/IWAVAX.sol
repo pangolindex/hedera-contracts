@@ -8,4 +8,5 @@ interface IWAVAX {
     function balanceOf(address owner) external view returns (uint);
     function withdraw(uint) external;
     function withdraw(address src, address dst, uint) external;
+    function TOKEN_ID() external view returns (address tokenId); // for WHBAR
 }

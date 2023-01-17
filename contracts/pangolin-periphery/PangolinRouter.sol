@@ -28,7 +28,7 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
     constructor(address _factory, address _wavaxContract) public {
         factory = _factory;
         wavaxContract = IWAVAX(_wavaxContract);
-        address tmpWavaxToken = address(uint160(_wavaxContract) + 1);
+        address tmpWavaxToken = IWAVAX(_wavaxContract).TOKEN_ID();
         wavaxToken = tmpWavaxToken;
 
         // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).

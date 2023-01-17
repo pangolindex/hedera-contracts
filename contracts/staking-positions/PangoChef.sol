@@ -13,13 +13,6 @@ import "./interfaces/IPangolinFactory.sol";
 import "./interfaces/IPangolinPair.sol";
 import "./interfaces/IRewarder.sol";
 
-/** @dev We call this contract with try/catch to figure out if pair is an actual pair. */
-contract SafeExternalCalls {
-    function getReserveTokenAddresses(address pair) external view returns (address, address) {
-        return (IPangolinPair(pair).token0(), IPangolinPair(pair).token1());
-    }
-}
-
 /**
  * @title PangoChef
  * @author Shung for Pangolin
@@ -80,8 +73,6 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
     /** @notice The UNI-V2 factory that creates pair tokens. */
     IPangolinFactory public immutable factory;
 
-    SafeExternalCalls private safeExternalCalls;
-
     /** @notice The contract for wrapping and unwrapping the native gas token (e.g.: WETH). */
     address public immutable wrappedNativeToken;
 
@@ -131,6 +122,8 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
     ) PangoChefFunding(newRewardsToken, newAdmin) {
         // Get WAVAX-PNG (or WETH-PNG, etc.) liquidity token.
         address poolZeroPair = newFactory.getPair(newRewardsToken, newWrappedNativeToken);
+        address poolZeroPairContract =
+            newFactory.getPairContract(newRewardsToken, newWrappedNativeToken);
 
         // Check pair exists, which implies `newRewardsToken != 0 && newWrappedNativeToken != 0`.
         if (poolZeroPair == address(0)) revert NullInput();
@@ -139,10 +132,8 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
         factory = newFactory;
         wrappedNativeToken = newWrappedNativeToken;
 
-        safeExternalCalls = SafeExternalCalls(new SafeExternalCalls());
-
         // Initialize pool zero with WAVAX-PNG liquidity token.
-        _initializePool(poolZeroPair, PoolType.ERC20_POOL);
+        _initializePool(poolZeroPair, poolZeroPairContract, PoolType.ERC20_POOL);
     }
 
     /**
@@ -160,16 +151,17 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
     /**
      * @notice External restricted function to initialize/create a pool.
      * @param tokenOrRecipient The token used in staking, or the sole recipient of the rewards.
+     * @param pairContract The contract of the pair if tokenOrRecipient is a Pangolin pair.
      * @param poolType The pool type, which should either be ERC20_POOL, or RELAYER_POOL.
      *                 ERC20_POOL is a regular staking pool, in which anyone can stake the token
      *                 to receive rewards. In RELAYER_POOL, there is only one recipient of the
      *                 rewards. RELAYER_POOL is used for diverting token emissions.
      */
-    function initializePool(address tokenOrRecipient, PoolType poolType)
+    function initializePool(address tokenOrRecipient, address pairContract, PoolType poolType)
         external
         onlyRole(POOL_MANAGER_ROLE)
     {
-        _initializePool(tokenOrRecipient, poolType);
+        _initializePool(tokenOrRecipient, pairContract, poolType);
     }
 
     /**
@@ -794,9 +786,14 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
      * @notice Private function to initialize a pool.
      * @param tokenOrRecipient The address of the token when poolType is ERC_20, or the recipient
      *                         address when poolType is RELAYER_POOL.
+     * @param pairContract The contract of the pair if tokenOrRecipient is a Pangolin pair.
      * @param poolType The type of the pool, which determines which actions can be performed on it.
      */
-    function _initializePool(address tokenOrRecipient, PoolType poolType) private {
+    function _initializePool(
+        address tokenOrRecipient,
+        address pairContract,
+        PoolType poolType
+    ) private {
         // Get the next `poolId` from `_poolsLength`, then increment `_poolsLength`.
         uint256 poolId = _poolsLength++;
         Pool storage pool = pools[poolId];
@@ -812,24 +809,22 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
         if (poolType == PoolType.ERC20_POOL) {
             // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
             int responseCode = associateToken(address(this), tokenOrRecipient);
-            require(
-                responseCode == HederaResponseCodes.SUCCESS ||
-                    responseCode == HederaResponseCodes.TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT,
-                'Assocation failed'
-            );
+            if (
+                responseCode != HederaResponseCodes.SUCCESS &&
+                responseCode != HederaResponseCodes.TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT
+            ) revert InvalidToken();
 
-            // Gas griefing is not possible as only 63/64 of the gas is forwarded per EIP-150.
-            try safeExternalCalls.getReserveTokenAddresses(
-                tokenOrRecipient
-            ) returns (address token0, address token1) {
-                if (factory.getPair(token0, token1) == tokenOrRecipient) {
-                    if (token0 == address(rewardsToken)) {
-                        pool.rewardPair = token1;
-                    } else if (token1 == address(rewardsToken)) {
-                        pool.rewardPair = token0;
-                    }
+            if (pairContract != address(0)) {
+                address token0 = IPangolinPair(pairContract).token0();
+                address token1 = IPangolinPair(pairContract).token1();
+                if (factory.getPair(token0, token1) != tokenOrRecipient) revert InvalidToken();
+                if (factory.getPairContract(token0, token1) != pairContract) revert InvalidToken();
+                if (token0 == address(rewardsToken)) {
+                    pool.rewardPair = token1;
+                } else if (token1 == address(rewardsToken)) {
+                    pool.rewardPair = token0;
                 }
-            } catch {}
+            }
         }
 
         emit PoolInitialized(poolId, tokenOrRecipient);
