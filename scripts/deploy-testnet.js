@@ -29,7 +29,6 @@ async function main() {
     }
 
     // Optional environment variables
-    const FACTORY_CONTRACT_ID = process.env.FACTORY_CONTRACT_ID;
     const WHBAR_CONTRACT_ID = process.env.WHBAR_CONTRACT_ID;
     const START_VESTING = process.env.START_VESTING;
 
@@ -155,24 +154,17 @@ async function main() {
     deployment['CommunityTreasury'] = communityTreasuryAddress;
 
     // PangolinFactory
-    let pangolinFactoryId;
-    let pangolinFactoryAddress;
-    if (!FACTORY_CONTRACT_ID) {
-        const createPangolinFactoryTx = await new ContractCreateFlow()
-            .setBytecode(pangolinFactoryContract.bytecode)
-            .setConstructorParameters(
-                new ContractFunctionParameters()
-                    .addAddress(timelockAddress) // feeToSetter
-            )
-            .setGas(80_000) // 78,473
-            .execute(client);
-        const createPangolinFactoryRx = await createPangolinFactoryTx.getReceipt(client);
-        pangolinFactoryId = createPangolinFactoryRx.contractId;
-        pangolinFactoryAddress = `0x${AccountId.fromString(pangolinFactoryId).toSolidityAddress()}`;
-    } else {
-        pangolinFactoryId = FACTORY_CONTRACT_ID;
-        pangolinFactoryAddress = `0x${AccountId.fromString(pangolinFactoryId).toSolidityAddress()}`;
-    }
+    const createPangolinFactoryTx = await new ContractCreateFlow()
+        .setBytecode(pangolinFactoryContract.bytecode)
+        .setConstructorParameters(
+            new ContractFunctionParameters()
+                .addAddress(timelockAddress) // feeToSetter
+        )
+        .setGas(80_000) // 78,473
+        .execute(client);
+    const createPangolinFactoryRx = await createPangolinFactoryTx.getReceipt(client);
+    const pangolinFactoryId = createPangolinFactoryRx.contractId;
+    const pangolinFactoryAddress = `0x${AccountId.fromString(pangolinFactoryId).toSolidityAddress()}`;
     console.log(`PangolinFactory: ${pangolinFactoryAddress}`);
     deployment['PangolinFactory'] = pangolinFactoryAddress;
 
