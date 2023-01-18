@@ -102,7 +102,7 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
     );
 
     /** @notice The event emitted when a pool is created. */
-    event PoolInitialized(uint256 indexed poolId, address indexed tokenOrRecipient);
+    event PoolInitialized(uint256 indexed poolId, address indexed tokenOrRecipient, address indexed pairContract);
 
     /** @notice The event emitted when the rewarder of a pool is changed. */
     event RewarderSet(uint256 indexed poolId, address indexed rewarder);
@@ -827,7 +827,7 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
             }
         }
 
-        emit PoolInitialized(poolId, tokenOrRecipient);
+        emit PoolInitialized(poolId, tokenOrRecipient, pairContract);
     }
 
     /**
