@@ -836,4 +836,6 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
             transferNFTs(address(positionsToken), froms, tos, serialNumbers);
         if (transferResponseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
     }
+
+    receive() external payable {}
 }

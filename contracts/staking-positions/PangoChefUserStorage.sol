@@ -71,4 +71,6 @@ contract PangoChefUserStorage is GenericErrors, Ownable {
         require(userStorageContract == address(this), "Unpriveleged user");
         to.call{ value: amount }("");
     }
+
+    receive() external payable {}
 }

@@ -1019,4 +1019,6 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
                         user.valueVariables.balance) +
                         (deltaRewardSummations.rewardPerValue * user.previousValues)) / PRECISION);
     }
+
+    receive() external payable {}
 }
