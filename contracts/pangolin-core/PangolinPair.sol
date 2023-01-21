@@ -26,6 +26,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
     address public immutable override factory;
     address public override token0;
     address public override token1;
+    address public override coreFeeCollector;
 
     address public override pairToken;
 
@@ -58,6 +59,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
 
     constructor() public {
         factory = msg.sender;
+        coreFeeCollector = IPangolinFactory(msg.sender).coreFeeCollector();
     }
 
     // called once by the factory at time of deployment
@@ -153,7 +155,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
                     uint numerator = IERC20(pairToken).totalSupply().mul(rootK.sub(rootKLast));
                     uint denominator = rootK.mul(5).add(rootKLast);
                     uint liquidity = numerator / denominator;
-                    if (liquidity > 0) _mint(feeTo, liquidity);
+                    if (liquidity > 0) _mint(coreFeeCollector, liquidity);
                 }
             }
         } else if (_kLast != 0) {
@@ -253,4 +255,6 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
     function sync() external override lock {
         _update(IERC20(token0).balanceOf(address(this)), IERC20(token1).balanceOf(address(this)), reserve0, reserve1);
     }
+
+    receive() external payable {}
 }

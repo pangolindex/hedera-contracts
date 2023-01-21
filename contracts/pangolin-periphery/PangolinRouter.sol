@@ -36,9 +36,7 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
         require(responseCode == HederaResponseCodes.SUCCESS, 'Assocation failed');
     }
 
-    receive() external payable {
-        assert(msg.sender == address(wavaxContract)); // only accept AVAX via fallback from the WAVAX contract
-    }
+    receive() external payable {}
 
     // **** ADD LIQUIDITY ****
     function _addLiquidity(

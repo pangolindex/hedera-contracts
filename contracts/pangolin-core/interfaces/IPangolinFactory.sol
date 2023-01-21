@@ -4,6 +4,7 @@ pragma solidity >=0.5.0;
 interface IPangolinFactory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
+    function coreFeeCollector() external view returns (address);
     function feeTo() external view returns (address);
     function feeToSetter() external view returns (address);
 
