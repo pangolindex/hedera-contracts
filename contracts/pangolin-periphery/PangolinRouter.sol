@@ -131,10 +131,6 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
         address to,
         uint deadline
     ) public virtual override ensure(deadline) returns (uint amountToken, uint amountAVAX) {
-        // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
-        int associateResponseCode = associateToken(address(this), token);
-        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Association failed');
-
         (amountToken, amountAVAX) = removeLiquidity(
             token,
             wavaxToken,
@@ -146,10 +142,6 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
         );
 
         TransferHelper.safeTransfer(token, to, amountToken);
-
-        // Dissociate.
-        int dissociateResponseCode = dissociateToken(address(this), token);
-        require(dissociateResponseCode == HederaResponseCodes.SUCCESS, 'Association failed');
 
         wavaxContract.withdraw(amountAVAX);
         TransferHelper.safeTransferAVAX(to, amountAVAX);
