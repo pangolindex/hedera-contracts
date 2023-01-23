@@ -115,7 +115,7 @@ abstract contract PangoChefFunding is AccessControlEnumerable, GenericErrors, He
         totalWeight = INITIAL_WEIGHT;
 
         // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
-        int responseCode = associateToken(address(this), newRewardsToken);
+        int responseCode = HederaTokenService.associateToken(address(this), newRewardsToken);
         require(responseCode == HederaResponseCodes.SUCCESS, 'Association failed');
     }
 

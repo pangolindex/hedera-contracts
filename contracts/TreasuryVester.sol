@@ -81,10 +81,10 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
         token.tokenKeys = keys;
         token.tokenSupplyType = true; // Finite.
         token.maxSupply = MAX_SUPPLY;
-        token.expiry = createAutoRenewExpiry(address(this), 90 days);
+        token.expiry = ExpiryHelper.createAutoRenewExpiry(address(this), 90 days);
 
         // Create the token.
-        (int256 responseCode, address tokenId) = createFungibleToken(token, INITIAL_SUPPLY, uint32(DECIMALS));
+        (int256 responseCode, address tokenId) = HederaTokenService.createFungibleToken(token, INITIAL_SUPPLY, uint32(DECIMALS));
         require(responseCode == HederaResponseCodes.SUCCESS, "Token creation failed");
 
         // Set the immutable state variable for the distribution token.
@@ -166,7 +166,7 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
         _mint(actualVestingAmount);
 
-        int256 responseCode = transferTokens(PNG, accountIds, amounts);
+        int256 responseCode = HederaTokenService.transferTokens(PNG, accountIds, amounts);
         require(responseCode == HederaResponseCodes.SUCCESS, "Transfer failed");
 
         emit TokensVested(vestingAmount);
@@ -174,7 +174,7 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
     function _mint(int64 amount) private {
         assert(amount > 0);
-        (int256 responseCode,,) = mintToken(PNG, uint64(amount), new bytes[](0));
+        (int256 responseCode,,) = HederaTokenService.mintToken(PNG, uint64(amount), new bytes[](0));
         require(responseCode == HederaResponseCodes.SUCCESS, "Mint failed");
     }
 }

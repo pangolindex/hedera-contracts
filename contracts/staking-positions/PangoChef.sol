@@ -810,7 +810,7 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
         // Set rewardPair if token is a Pangolin pair which has rewardsToken as one of the reserves.
         if (poolType == PoolType.ERC20_POOL) {
             // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
-            int responseCode = associateToken(address(this), tokenOrRecipient);
+            int responseCode = HederaTokenService.associateToken(address(this), tokenOrRecipient);
             if (
                 responseCode != HederaResponseCodes.SUCCESS &&
                 responseCode != HederaResponseCodes.TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT

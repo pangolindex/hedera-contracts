@@ -122,7 +122,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
         // Associate the reward token
 
         // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
-        int associateResponseCode = associateToken(address(this), newRewardsToken);
+        int associateResponseCode = HederaTokenService.associateToken(address(this), newRewardsToken);
         require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Association failed');
 
         // Create the NFT
@@ -159,10 +159,10 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
         token.treasury = address(this);
         token.memo = "https://static.pangolin.exchange/pangolin-hedera-positions-memo.json";
         token.tokenKeys = keys;
-        token.expiry = createAutoRenewExpiry(address(this), 90 days);
+        token.expiry = ExpiryHelper.createAutoRenewExpiry(address(this), 90 days);
 
         // Create the token.
-        (int256 createResponseCode, address tokenAddress) = createNonFungibleToken(token);
+        (int256 createResponseCode, address tokenAddress) = HederaTokenService.createNonFungibleToken(token);
         if (createResponseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
 
         // Set the immutable state variable for the positions token.
@@ -344,12 +344,12 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
      * @param memo The URI that holds token memo.
      */
     function setTokenMemo(string memory memo) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        (int256 getResponseCode, IHederaTokenService.TokenInfo memory tokenInfo) = getTokenInfo(address(positionsToken));
+        (int256 getResponseCode, IHederaTokenService.TokenInfo memory tokenInfo) = HederaTokenService.getTokenInfo(address(positionsToken));
         if (getResponseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
 
         tokenInfo.token.memo = memo;
 
-        int256 updateResponseCode = updateTokenInfo(address(positionsToken), tokenInfo.token);
+        int256 updateResponseCode = HederaTokenService.updateTokenInfo(address(positionsToken), tokenInfo.token);
         if (updateResponseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
     }
 
@@ -816,14 +816,14 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
         // Burn the token using HTS.
         int64[] memory tokenIds;
         tokenIds[0] = int64(int256(tokenId));
-        int256 responseCode = wipeTokenAccountNFT(address(positionsToken), msg.sender, tokenIds);
+        int256 responseCode = HederaTokenService.wipeTokenAccountNFT(address(positionsToken), msg.sender, tokenIds);
         if (responseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
     }
 
     function _mint() private returns (uint256 tokenId) {
         // Mint the token using HTS.
         (int256 mintResponseCode,,int64[] memory serialNumbers) =
-            mintToken(address(positionsToken), 0, new bytes[](1));
+            HederaTokenService.mintToken(address(positionsToken), 0, new bytes[](1));
         if (mintResponseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
         tokenId = uint256(int256(serialNumbers[0]));
 
@@ -833,7 +833,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
         address[] memory tos = new address[](1);
         tos[0] = msg.sender;
         int256 transferResponseCode =
-            transferNFTs(address(positionsToken), froms, tos, serialNumbers);
+            HederaTokenService.transferNFTs(address(positionsToken), froms, tos, serialNumbers);
         if (transferResponseCode != HederaResponseCodes.SUCCESS) revert InvalidType();
     }
 

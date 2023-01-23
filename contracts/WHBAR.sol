@@ -37,10 +37,10 @@ contract WHBAR is HederaTokenService, ExpiryHelper {
         token.symbol = SYMBOL;
         token.treasury = address(this); // also associates token.
         token.tokenKeys = keys;
-        token.expiry = createAutoRenewExpiry(address(this), 90 days);
+        token.expiry = ExpiryHelper.createAutoRenewExpiry(address(this), 90 days);
 
         // Create the token.
-        (int256 responseCode, address tokenId) = createFungibleToken(token, 0, uint32(DECIMALS));
+        (int256 responseCode, address tokenId) = HederaTokenService.createFungibleToken(token, 0, uint32(DECIMALS));
         require(responseCode == HederaResponseCodes.SUCCESS, "Token creation failed");
 
         // Set the immutable state variable for the distribution token.
@@ -53,18 +53,18 @@ contract WHBAR is HederaTokenService, ExpiryHelper {
 
     function deposit() public payable {
         assert(msg.value <= MAXIMUM_HEDERA_TOKEN_SUPPLY);
-        (int256 mintResponseCode,,) = mintToken(TOKEN_ID, uint64(msg.value), new bytes[](0));
+        (int256 mintResponseCode,,) = HederaTokenService.mintToken(TOKEN_ID, uint64(msg.value), new bytes[](0));
         require(mintResponseCode == HederaResponseCodes.SUCCESS, "Mint failed");
-        int256 transferResponseCode = transferToken(TOKEN_ID, address(this), msg.sender, int64(uint64(msg.value)));
+        int256 transferResponseCode = HederaTokenService.transferToken(TOKEN_ID, address(this), msg.sender, int64(uint64(msg.value)));
         require(transferResponseCode == HederaResponseCodes.SUCCESS, "Transfer failed");
         emit Deposit(msg.sender, msg.value);
     }
 
     function withdraw(uint wad) external {
         assert(wad <= MAXIMUM_HEDERA_TOKEN_SUPPLY);
-        int256 transferResponseCode = transferToken(TOKEN_ID, msg.sender, address(this), int64(uint64(wad)));
+        int256 transferResponseCode = HederaTokenService.transferToken(TOKEN_ID, msg.sender, address(this), int64(uint64(wad)));
         require(transferResponseCode == HederaResponseCodes.SUCCESS, "Transfer failed");
-        (int256 burnResponseCode,) = burnToken(TOKEN_ID, uint64(wad), new int64[](0));
+        (int256 burnResponseCode,) = HederaTokenService.burnToken(TOKEN_ID, uint64(wad), new int64[](0));
         require(burnResponseCode == HederaResponseCodes.SUCCESS, "Burn failed");
         payable(msg.sender).transfer(wad);
         emit Withdrawal(msg.sender, wad);

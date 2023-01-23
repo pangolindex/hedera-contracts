@@ -32,7 +32,7 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
         wavaxToken = tmpWavaxToken;
 
         // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
-        int responseCode = associateToken(address(this), tmpWavaxToken);
+        int responseCode = HederaTokenService.associateToken(address(this), tmpWavaxToken);
         require(responseCode == HederaResponseCodes.SUCCESS, 'Association failed');
     }
 
