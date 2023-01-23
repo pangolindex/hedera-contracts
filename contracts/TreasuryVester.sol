@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.9;
+pragma solidity 0.8.15;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
@@ -20,8 +20,8 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
     Recipient[] public recipients;
 
     uint32 private constant DECIMALS = 8; // eight
-    int64 private constant MAX_SUPPLY = int64(230_000_000) * int64(uint64(10**DECIMALS)); // two-hundred-and-thirty million
-    uint64 private constant INITIAL_SUPPLY = uint64(11_500_000) * uint64(10**DECIMALS); // eleven million and five-hundred thousand (airdrop supply)
+    int64 private constant MAX_SUPPLY = int64(230_000_000) * int64(uint64(10**DECIMALS));
+    uint64 private constant INITIAL_SUPPLY = uint64(17_250_000) * uint64(10**DECIMALS);
     uint256 private constant SUPPLY_KEY = 16; // 4th bit (counting from 0) flipped, i.e. 10000 binary.
     uint256 private constant STEPS_TO_SLASH = 30; // increment index from vestingAmounts array every 30 distributions
 
@@ -29,7 +29,7 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
     uint256 private constant VESTING_CLIFF = 1 days;
     uint256 public lastDistributedTime;
 
-    int64 public constant DENOMINATOR = 10_000; // ten-thousand
+    int64 public constant DENOMINATOR = 10_000;
 
     address public immutable PNG;
 
@@ -37,8 +37,8 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
 
     uint256 public distributionCount; // num of times distribute func was executed.
 
-    // daily amount distributed on each month. e.g., first 30 distributions will distribute 182083333333333 each, bar dust. ~218.5M total (max supply - airdrop).
-    int64[30] public vestingAmounts = [ int64(182083333333333), 101966666666666, 58266666666666, 38601666666666, 28405000000000, 26948333333333, 25491666666666, 24035000000000, 22578333333333, 21121666666666, 19665000000000, 18208333333333, 17115833333333, 16023333333333, 14930833333333, 13838333333333, 12745833333333, 11653333333333, 10560833333333, 9468333333333, 8740000000000, 8011666666666, 7283333333333, 6555000000000, 5826666666666, 5098333333333, 4370000000000, 3641666666666, 2913333333333, 2185000000000 ];
+    // daily amount distributed on each month
+    int64[30] public vestingAmounts = [ int64(23638888888889), 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889, 23638888888889 ];
 
     event TokensVested(int64 amount);
     event RecipientsChanged(address[] accounts, int64[] allocations);
