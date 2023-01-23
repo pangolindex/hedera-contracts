@@ -24,6 +24,8 @@ contract RewarderViaMultiplierForPangoChef is IRewarder, HederaTokenService {
     // @dev Ceiling on additional rewards to prevent a self-inflicted DOS via gas limitations when claim
     uint256 private constant MAX_REWARDS = 100;
 
+    uint256 private constant MAX_TRANSFER_AMOUNT = uint256(uint64(type(int64).max));
+
     /// @dev Additional reward quantities that might be owed to users trying to claim after funds have been exhausted
     mapping(address => mapping(uint256 => uint256)) private rewardDebts;
 
@@ -145,6 +147,7 @@ contract RewarderViaMultiplierForPangoChef is IRewarder, HederaTokenService {
     }
 
     function _transferReward(address reward, address recipient, uint256 amount) private {
+        require(amount <= MAX_TRANSFER_AMOUNT, "Illegal reward amount");
         int256 transferResponseCode = HederaTokenService.transferToken(reward, address(this), recipient, int64(uint64(amount)));
         require(transferResponseCode == HederaResponseCodes.SUCCESS, "Transfer failed");
     }
