@@ -49,7 +49,7 @@ contract PangolinFactory is IPangolinFactory, HederaTokenService {
         require(pair != address(0), 'Pangolin: PAIR_EXISTS');
         address pairToken = IPangolinPair(pair).initialize{ value: msg.value }(token0, token1);
         int associateResponseCode = associateToken(address(this), pairToken);
-        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Pangolin: ASSOCATION_FAILED');
+        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Pangolin: ASSOCIATION_FAILED');
         ICoreFeeCollector(coreFeeCollector).associate(pairToken);
         emit PairCreated(token0, token1, pair, allPairsLength++);
     }

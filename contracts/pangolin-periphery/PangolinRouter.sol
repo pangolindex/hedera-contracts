@@ -33,7 +33,7 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
 
         // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
         int responseCode = associateToken(address(this), tmpWavaxToken);
-        require(responseCode == HederaResponseCodes.SUCCESS, 'Assocation failed');
+        require(responseCode == HederaResponseCodes.SUCCESS, 'Association failed');
     }
 
     receive() external payable {}
@@ -133,7 +133,7 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
     ) public virtual override ensure(deadline) returns (uint amountToken, uint amountAVAX) {
         // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
         int associateResponseCode = associateToken(address(this), token);
-        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Assocation failed');
+        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Association failed');
 
         (amountToken, amountAVAX) = removeLiquidity(
             token,
@@ -149,7 +149,7 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
 
         // Dissociate.
         int dissociateResponseCode = dissociateToken(address(this), token);
-        require(dissociateResponseCode == HederaResponseCodes.SUCCESS, 'Assocation failed');
+        require(dissociateResponseCode == HederaResponseCodes.SUCCESS, 'Association failed');
 
         wavaxContract.withdraw(amountAVAX);
         TransferHelper.safeTransferAVAX(to, amountAVAX);

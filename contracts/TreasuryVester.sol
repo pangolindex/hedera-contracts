@@ -167,7 +167,7 @@ contract TreasuryVester is HederaTokenService, ExpiryHelper, AccessControlEnumer
         _mint(actualVestingAmount);
 
         int256 responseCode = transferTokens(PNG, accountIds, amounts);
-        require(responseCode == HederaResponseCodes.SUCCESS, "Transfer faied");
+        require(responseCode == HederaResponseCodes.SUCCESS, "Transfer failed");
 
         emit TokensVested(vestingAmount);
     }

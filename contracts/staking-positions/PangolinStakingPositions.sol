@@ -123,7 +123,7 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
 
         // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
         int associateResponseCode = associateToken(address(this), newRewardsToken);
-        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Assocation failed');
+        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Association failed');
 
         // Create the NFT
 
