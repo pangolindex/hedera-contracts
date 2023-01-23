@@ -67,7 +67,7 @@ contract PangoChefUserStorage is GenericErrors, Ownable {
 
     /** @notice Allow user to withdraw HBAR as they are responsible for managing rent payments */
     function withdraw(uint256 amount, address to) external {
-        address userStorageContract = PangoChef(owner()).getUserStorageContract(msg.sender);
+        address userStorageContract = PangoChef(payable(owner())).getUserStorageContract(msg.sender);
         require(userStorageContract == address(this), "Unpriveleged user");
         to.call{ value: amount }("");
     }

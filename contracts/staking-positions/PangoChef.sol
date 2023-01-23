@@ -391,9 +391,11 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
 
     function _getUserStorageContract(address userId) private view returns (PangoChefUserStorage) {
         return PangoChefUserStorage(
+            payable(
                 Create2.computeAddress(
                     bytes32(bytes20(userId)),
                     keccak256(type(PangoChefUserStorage).creationCode)
+                )
             )
         );
     }

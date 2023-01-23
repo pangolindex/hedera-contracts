@@ -457,19 +457,19 @@ contract PangolinStakingPositions is HederaTokenService, ExpiryHelper, SelfFundi
     function positions(uint256 positionId) public view returns (Position memory) {
         uint256 contractIndex = _getPositionsStorageContractIndex(positionId);
         address positionsStorageContract = _getPositionsStorageContract(contractIndex);
-        return PangolinStakingPositionsStorage(positionsStorageContract).positions(positionId);
+        return PangolinStakingPositionsStorage(payable(positionsStorageContract)).positions(positionId);
     }
 
     function _setPosition(uint256 positionId, Position memory position) private {
         uint256 contractIndex = _getPositionsStorageContractIndex(positionId);
         address positionsStorageContract = _getPositionsStorageContract(contractIndex);
-        PangolinStakingPositionsStorage(positionsStorageContract).updatePosition(positionId, position);
+        PangolinStakingPositionsStorage(payable(positionsStorageContract)).updatePosition(positionId, position);
     }
 
     function _deletePosition(uint256 positionId) private {
         uint256 contractIndex = _getPositionsStorageContractIndex(positionId);
         address positionsStorageContract = _getPositionsStorageContract(contractIndex);
-        PangolinStakingPositionsStorage(positionsStorageContract).deletePosition(positionId);
+        PangolinStakingPositionsStorage(payable(positionsStorageContract)).deletePosition(positionId);
     }
 
     function _getPositionsStorageContractIndex(uint256 positionId) private pure returns (uint256) {
