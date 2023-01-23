@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.6.12;
-pragma experimental ABIEncoderV2;
 
 import '../hts-precompile/HederaResponseCodes.sol';
 import '../hts-precompile/HederaTokenService.sol';
@@ -11,9 +10,6 @@ import './interfaces/IPangolinFactory.sol';
 contract CoreFeeCollector is ICoreFeeCollector, HederaTokenService {
     address public immutable override factory;
 
-    event Associated(address indexed token);
-    event Withdrawn(address indexed token, address indexed to, uint256 amount);
-
     constructor() public {
         factory = msg.sender;
     }
@@ -23,7 +19,7 @@ contract CoreFeeCollector is ICoreFeeCollector, HederaTokenService {
         require(amount != 0, 'Pangolin: NO OP');
         require(amount <= uint256(uint64(type(int64).max)), 'Pangolin: OVERFLOW');
 
-        int256 transferResponseCode = transferToken(token, address(this), to, int64(uint64(amount)));
+        int256 transferResponseCode = HederaTokenService.transferToken(token, address(this), to, int64(uint64(amount)));
         require(transferResponseCode == HederaResponseCodes.SUCCESS, 'Transfer failed');
 
         emit Withdrawn(token, to, amount);
@@ -33,15 +29,14 @@ contract CoreFeeCollector is ICoreFeeCollector, HederaTokenService {
     function associate(address token) external override {
         require(msg.sender == factory, 'Pangolin: FORBIDDEN'); // sufficient check
 
-        // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
-        int responseCode = associateToken(address(this), token);
-        require(responseCode == HederaResponseCodes.SUCCESS, 'Assocation failed');
+        int256 responseCode = HederaTokenService.associateToken(address(this), token);
+        require(responseCode == HederaResponseCodes.SUCCESS, 'Association failed');
 
         emit Associated(token);
     }
 
     function feeTo() public view override returns (address) {
-        IPangolinFactory(factory).feeTo();
+        return IPangolinFactory(factory).feeTo();
     }
 
     receive() external payable {}
