@@ -261,10 +261,7 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
      */
     function emergencyExitLevel2(uint256 poolId, bytes32 confirmation) external nonReentrant {
         if (confirmation != keccak256(
-                abi.encodePacked(
-                    "I am ready to lose everything in this pool. Let me go.",
-                    msg.sender
-                )
+                abi.encodePacked("I will lose all in this pool.", msg.sender)
             )
         ) revert UnprivilegedCaller();
         _emergencyExit(poolId, false);
@@ -454,9 +451,6 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
             reward = 0;
             // Compounding.
         } else {
-            assert(stakeType == StakeType.COMPOUND);
-            assert(amount == 0);
-
             // Add liquidity using the rewards of this pool.
             amount = _addLiquidity(pool, reward, slippage);
 
@@ -810,11 +804,7 @@ contract PangoChef is PangoChefFunding, ReentrancyGuard {
         // Set rewardPair if token is a Pangolin pair which has rewardsToken as one of the reserves.
         if (poolType == PoolType.ERC20_POOL) {
             // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
-            int responseCode = HederaTokenService.associateToken(address(this), tokenOrRecipient);
-            if (
-                responseCode != HederaResponseCodes.SUCCESS &&
-                responseCode != HederaResponseCodes.TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT
-            ) revert InvalidToken();
+            safeAssociate(tokenOrRecipient);
 
             if (pairContract != address(0)) {
                 address token0 = IPangolinPair(pairContract).token0();
