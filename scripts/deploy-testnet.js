@@ -31,6 +31,7 @@ async function main() {
     // Optional environment variables
     const WHBAR_CONTRACT_ID = process.env.WHBAR_CONTRACT_ID;
     const START_VESTING = process.env.START_VESTING;
+    const HBAR_USD_PRICE = Number.parseFloat(process.env.HBAR_USD_PRICE || '0.07');
 
     const TIMELOCK_DELAY = 86_400 * 2; // 2 days
 
@@ -38,8 +39,6 @@ async function main() {
     client.setOperator(MY_ACCOUNT_ID, MY_PRIVATE_KEY);
 
     const deployment = {};
-    const deployerAddress = `0x${AccountId.fromString(MY_ACCOUNT_ID).toSolidityAddress()}`;
-    console.log(`Deployer: ${deployerAddress}`);
 
     const wrappedNativeTokenContract = await ethers.getContractFactory('WHBAR');
     const communityTreasury = await ethers.getContractFactory('CommunityTreasury');
@@ -55,6 +54,12 @@ async function main() {
     const governor = await ethers.getContractFactory('Governor');
     const governorAssistant = await ethers.getContractFactory('GovernorAssistant');
     const timelock = await ethers.getContractFactory('Timelock');
+
+    console.log(`Using HBAR price of $${HBAR_USD_PRICE}`);
+    console.log(`Init Hash: ${pangolinPairInitHash}`);
+
+    const deployerAddress = `0x${AccountId.fromString(MY_ACCOUNT_ID).toSolidityAddress()}`;
+    console.log(`Deployer: ${deployerAddress}`);
 
     const balanceBefore = await new AccountBalanceQuery()
         .setAccountId(MY_ACCOUNT_ID)
@@ -90,7 +95,7 @@ async function main() {
         const createWrappedNativeTokenTx = await new ContractCreateFlow()
             .setBytecode(wrappedNativeTokenContract.bytecode)
             .setGas(400_000) // 349,451
-            .setInitialBalance(new Hbar(40))
+            .setInitialBalance(new Hbar(Math.ceil(1.10 / HBAR_USD_PRICE))) // $1.00
             .execute(client);
         const createWrappedNativeTokenRx = await createWrappedNativeTokenTx.getReceipt(client);
         wrappedNativeTokenContractId = createWrappedNativeTokenRx.contractId;
@@ -120,7 +125,7 @@ async function main() {
                 .addAddress(deployerAddress) // admin (deployer for now and will be set to Multisig later)
         )
         .setGas(700_000) // 657,136
-        .setInitialBalance(new Hbar(40))
+        .setInitialBalance(new Hbar(Math.ceil(1.10 / HBAR_USD_PRICE))) // $0.90
         .execute(client);
     const createTreasuryVesterRx = await createTreasuryVesterTx.getReceipt(client);
     const treasuryVesterId = createTreasuryVesterRx.contractId;
@@ -160,7 +165,7 @@ async function main() {
             new ContractFunctionParameters()
                 .addAddress(timelockAddress) // feeToSetter
         )
-        .setGas(80_000) // 78,473
+        .setGas(130_000) // 111,422
         .execute(client);
     const createPangolinFactoryRx = await createPangolinFactoryTx.getReceipt(client);
     const pangolinFactoryId = createPangolinFactoryRx.contractId;
@@ -176,7 +181,7 @@ async function main() {
                 .addAddress(pangolinFactoryAddress) // factory
                 .addAddress(wrappedNativeTokenContractAddress) // whbar
         )
-        .setGas(900_000) // 765,518
+        .setGas(900_000) // 771,010
         .execute(client);
     const createPangolinRouterRx = await createPangolinRouterTx.getReceipt(client);
     const pangolinRouterId = createPangolinRouterRx.contractId;
@@ -192,8 +197,8 @@ async function main() {
                 .addAddress(pngHTSAddress)
                 .addAddress(wrappedNativeTokenHTSAddress)
         )
-        .setGas(1_900_000) // 1,893,647
-        .setPayableAmount(new Hbar(40))
+        .setGas(2_900_000) // 2,631,106
+        .setPayableAmount(new Hbar(Math.ceil(1.10 / HBAR_USD_PRICE))) // $1.00
         .execute(client);
     const createFirstPairRx = await createFirstPairTx.getRecord(client);
     const firstPairAddress = `0x${createFirstPairRx.contractFunctionResult.getAddress(0)}`;
@@ -242,7 +247,7 @@ async function main() {
                 .addAddress(deployerAddress) // newAdmin (deployer for now and will be set to Multisig later)
         )
         .setGas(1_400_000) // 1,390,489
-        .setInitialBalance(new Hbar(40))
+        .setInitialBalance(new Hbar(Math.ceil(1.10 / HBAR_USD_PRICE))) // $0.95
         .execute(client);
     const createPangolinStakingPositionsRx = await createPangolinStakingPositionsTx.getReceipt(client);
     const pangolinStakingPositionsId = createPangolinStakingPositionsRx.contractId;
@@ -319,9 +324,6 @@ async function main() {
     console.log(`Governor: ${governorAddress}`);
     deployment['Governor'] = governorAddress;
 
-    // TODO: Deploy Airdrop
-    // TODO: Deploy FeeCollector
-
     console.log('============================== CONFIGURATION: TIMELOCK ==============================');
 
     // Begin process of setting Timelock admin to Governor
@@ -364,17 +366,17 @@ async function main() {
         {
             // Community Treasury
             address: communityTreasuryAddress,
-            allocation: 2105, // 20%
+            allocation: 1569, // governance-owned treasury
         },
         {
             // Team
             address: multisigAddress,
-            allocation: 1842, // 10% team + 5% vc investor + 2.5% advisory
+            allocation: 1830, // multisig
         },
         {
             // Chef
             address: pangoChefRewardFundingForwarderAddress,
-            allocation: 6053, // 57.5% LPs & PNG Staking
+            allocation: 6601, // LPs & PNG Staking
         }
     ];
     const vesterAccounts = VESTER_ALLOCATIONS.map(({address}) => address);
