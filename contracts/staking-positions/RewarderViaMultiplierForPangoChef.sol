@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.15;
 
+import "@openzeppelin/contracts/access/IAccessControl.sol";
 import "../hts-precompile/HederaResponseCodes.sol";
 import "../hts-precompile/HederaTokenService.sol";
 
@@ -16,6 +17,9 @@ contract RewarderViaMultiplierForPangoChef is IRewarder, HederaTokenService {
     uint256[] public rewardMultipliers;
     address private immutable PANGO_CHEF;
     uint256 private immutable BASE_REWARD_TOKEN_DIVISOR;
+
+    // @dev Used for admin rewards withdrawal
+    bytes32 private constant DEFAULT_ADMIN_ROLE = 0x00;
 
     // @dev Ceiling on additional rewards to prevent a self-inflicted DOS via gas limitations when claim
     uint256 private constant MAX_REWARDS = 100;
@@ -127,6 +131,17 @@ contract RewarderViaMultiplierForPangoChef is IRewarder, HederaTokenService {
     /// @notice Overloaded getter for easy access to the reward multipliers
     function getRewardMultipliers() external view returns (uint256[] memory) {
         return rewardMultipliers;
+    }
+
+    /// @notice Admin function to withdraw rewards with the intention to move to a new rewarder
+    /// @notice Reward IDs are specified by the caller in the event that 1+ reward cannot be transferred
+    function adminWithdraw(uint256[] calldata rewardIds) external {
+        require(IAccessControl(PANGO_CHEF).hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "unauthorized");
+        uint256 rewardIdsLength = rewardIds.length;
+        for (uint256 i; i < rewardIdsLength; ++i) {
+            address rewardAddress = rewardTokens[i];
+            _transferReward(rewardAddress, msg.sender, IERC20(rewardAddress).balanceOf(address(this)));
+        }
     }
 
     function _transferReward(address reward, address recipient, uint256 amount) private {
