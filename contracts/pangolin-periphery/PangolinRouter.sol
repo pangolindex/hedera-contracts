@@ -131,6 +131,8 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
         address to,
         uint deadline
     ) public virtual override ensure(deadline) returns (uint amountToken, uint amountAVAX) {
+        _associateToken(token);
+
         (amountToken, amountAVAX) = removeLiquidity(
             token,
             wavaxToken,
@@ -142,6 +144,9 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
         );
 
         TransferHelper.safeTransfer(token, to, amountToken);
+
+        // token cannot be WAVAX or tx would revert above with a WAVAX/WAVAX pair
+        _disassociateToken(token);
 
         wavaxContract.withdraw(amountAVAX);
         TransferHelper.safeTransferAVAX(to, amountAVAX);
@@ -156,6 +161,8 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
         address to,
         uint deadline
     ) public virtual override ensure(deadline) returns (uint amountAVAX) {
+        _associateToken(token);
+
         (, amountAVAX) = removeLiquidity(
             token,
             wavaxToken,
@@ -165,9 +172,24 @@ contract PangolinRouter is IPangolinRouter, HederaTokenService {
             address(this),
             deadline
         );
+
         TransferHelper.safeTransfer(token, to, IERC20(token).balanceOf(address(this)));
+
+        // token cannot be WAVAX or tx would revert above with a WAVAX/WAVAX pair
+        _disassociateToken(token);
+
         wavaxContract.withdraw(amountAVAX);
         TransferHelper.safeTransferAVAX(to, amountAVAX);
+    }
+
+    function _associateToken(address _token) internal {
+        int256 responseCode = HederaTokenService.associateToken(address(this), _token);
+        require(responseCode == HederaResponseCodes.SUCCESS, 'Association failed');
+    }
+
+    function _disassociateToken(address _token) internal {
+        int256 responseCode = HederaTokenService.dissociateToken(address(this), _token);
+        require(responseCode == HederaResponseCodes.SUCCESS, 'Disassociation failed');
     }
 
     // **** SWAP ****
