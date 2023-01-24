@@ -12,6 +12,9 @@ const {
     ContractCallQuery,
     AccountBalanceQuery,
     ContractExecuteTransaction,
+    PrivateKey,
+    AccountCreateTransaction,
+    KeyList,
 } = require('@hashgraph/sdk');
 require('dotenv').config({path: '../.env'});
 
@@ -22,16 +25,17 @@ async function main() {
     // Required environment variables
     const MY_ACCOUNT_ID = process.env.MY_ACCOUNT_ID;
     const MY_PRIVATE_KEY = process.env.MY_PRIVATE_KEY;
-    const MULTISIG_ACCOUNT_ID = process.env.MULTISIG_ACCOUNT_ID;
 
-    if (MY_ACCOUNT_ID == null || MY_PRIVATE_KEY == null || MULTISIG_ACCOUNT_ID == null) {
-        throw new Error('Environment variables MY_ACCOUNT_ID, MY_PRIVATE_KEY, and MULTISIG_ACCOUNT_ID must be present');
+    if (MY_ACCOUNT_ID == null || MY_PRIVATE_KEY == null) {
+        throw new Error('Environment variables MY_ACCOUNT_ID, and MY_PRIVATE_KEY must be present');
     }
 
     // Optional environment variables
     const WHBAR_CONTRACT_ID = process.env.WHBAR_CONTRACT_ID;
     const START_VESTING = process.env.START_VESTING;
     const HBAR_USD_PRICE = Number.parseFloat(process.env.HBAR_USD_PRICE || '0.07');
+    const MULTISIG_ACCOUNT_ID = process.env.MULTISIG_ACCOUNT_ID;
+    const VESTING_BOT_ID = process.env.VESTING_BOT_ID;
 
     const TIMELOCK_DELAY = 86_400 * 2; // 2 days
 
@@ -65,12 +69,72 @@ async function main() {
         .setAccountId(MY_ACCOUNT_ID)
         .execute(client);
 
-    console.log('============================== DEPLOYMENT ==============================');
+    let vestingBotId;
+    let vestingBotAddress;
+    if (!VESTING_BOT_ID) {
+        const vestingBotPrivateKey = PrivateKey.generateED25519();
+        console.log(`Creating vesting bot with private key: ${vestingBotPrivateKey.toStringDer()} ...`);
+        const newAccountTx = await new AccountCreateTransaction()
+            .setKey(vestingBotPrivateKey.publicKey)
+            .setInitialBalance(new Hbar(10))
+            .execute(client);
+        const newAccountRx = await newAccountTx.getReceipt(client);
+        vestingBotId = newAccountRx.accountId;
+    } else {
+        vestingBotId = VESTING_BOT_ID;
+    }
+    vestingBotAddress = `0x${AccountId.fromString(vestingBotId).toSolidityAddress().toString()}`;
+    console.log(`Vesting Bot: ${vestingBotAddress}`);
+    deployment['Vesting Bot'] = vestingBotAddress;
 
     // Multisig
-    const multisigAddress = `0x${AccountId.fromString(MULTISIG_ACCOUNT_ID).toSolidityAddress()}`;
+    let multisigId;
+    let multisigAddress;
+    if (!MULTISIG_ACCOUNT_ID) {
+        console.log(`Creating multisig with 1/1 threshold ...`);
+        const createMultisigTx = await new AccountCreateTransaction()
+            .setKey(new KeyList([client.operatorPublicKey], 1))
+            .setInitialBalance(new Hbar(10))
+            .execute(client);
+        const createMultisigRx = await createMultisigTx.getReceipt(client);
+        multisigId = createMultisigRx.accountId;
+    } else {
+        multisigId = MULTISIG_ACCOUNT_ID;
+    }
+    multisigAddress = `0x${AccountId.fromString(multisigId).toSolidityAddress()}`;
     console.log(`Multisig: ${multisigAddress}`);
     deployment['Multisig'] = multisigAddress;
+
+    console.log('============================== DEPLOYMENT ==============================');
+
+    // WHBAR
+    let wrappedNativeTokenContractId;
+    let wrappedNativeTokenContractAddress;
+    if (!WHBAR_CONTRACT_ID) {
+        console.log(`Deploying WHBAR ...`);
+        const createWrappedNativeTokenTx = await new ContractCreateFlow()
+            .setBytecode(wrappedNativeTokenContract.bytecode)
+            .setGas(400_000) // 349,451
+            .setInitialBalance(new Hbar(Math.ceil(1.10 / HBAR_USD_PRICE))) // $1.00
+            .execute(client);
+        const createWrappedNativeTokenRx = await createWrappedNativeTokenTx.getReceipt(client);
+        wrappedNativeTokenContractId = createWrappedNativeTokenRx.contractId;
+    } else {
+        wrappedNativeTokenContractId = WHBAR_CONTRACT_ID;
+    }
+    wrappedNativeTokenContractAddress = `0x${AccountId.fromString(wrappedNativeTokenContractId).toSolidityAddress()}`;
+    console.log(`WHBAR (Contract): ${wrappedNativeTokenContractAddress}`);
+    deployment['WHBAR (Contract)'] = wrappedNativeTokenContractAddress;
+
+    // WHBAR HTS Address
+    const whbarQueryTx = await new ContractCallQuery()
+        .setContractId(wrappedNativeTokenContractId)
+        .setGas(24_000) // 21,204
+        .setFunction('TOKEN_ID')
+        .execute(client);
+    const wrappedNativeTokenHTSAddress = `0x${whbarQueryTx.getAddress(0)}`;
+    console.log(`WHBAR (HTS): ${wrappedNativeTokenHTSAddress}`);
+    deployment['WHBAR (HTS)'] = wrappedNativeTokenHTSAddress;
 
     // Timelock
     const createTimelockTx = await new ContractCreateFlow()
@@ -87,35 +151,6 @@ async function main() {
     const timelockAddress = `0x${AccountId.fromString(timelockId).toSolidityAddress()}`;
     console.log(`Timelock: ${timelockAddress}`);
     deployment['Timelock'] = timelockAddress;
-
-    // WHBAR
-    let wrappedNativeTokenContractId;
-    let wrappedNativeTokenContractAddress;
-    if (!WHBAR_CONTRACT_ID) {
-        const createWrappedNativeTokenTx = await new ContractCreateFlow()
-            .setBytecode(wrappedNativeTokenContract.bytecode)
-            .setGas(400_000) // 349,451
-            .setInitialBalance(new Hbar(Math.ceil(1.10 / HBAR_USD_PRICE))) // $1.00
-            .execute(client);
-        const createWrappedNativeTokenRx = await createWrappedNativeTokenTx.getReceipt(client);
-        wrappedNativeTokenContractId = createWrappedNativeTokenRx.contractId;
-        wrappedNativeTokenContractAddress = `0x${AccountId.fromString(wrappedNativeTokenContractId).toSolidityAddress()}`;
-    } else {
-        wrappedNativeTokenContractId = WHBAR_CONTRACT_ID;
-        wrappedNativeTokenContractAddress = `0x${AccountId.fromString(WHBAR_CONTRACT_ID).toSolidityAddress()}`;
-    }
-    console.log(`WHBAR (Contract): ${wrappedNativeTokenContractAddress}`);
-    deployment['WHBAR (Contract)'] = wrappedNativeTokenContractAddress;
-
-    // WHBAR HTS Address
-    const whbarQueryTx = await new ContractCallQuery()
-        .setContractId(wrappedNativeTokenContractId)
-        .setGas(24_000) // 21,204
-        .setFunction('TOKEN_ID')
-        .execute(client);
-    const wrappedNativeTokenHTSAddress = `0x${whbarQueryTx.getAddress(0)}`;
-    console.log(`WHBAR (HTS): ${wrappedNativeTokenHTSAddress}`);
-    deployment['WHBAR (HTS)'] = wrappedNativeTokenHTSAddress;
 
     // TreasuryVester
     const createTreasuryVesterTx = await new ContractCreateFlow()
@@ -265,21 +300,6 @@ async function main() {
     console.log(`SSS NFT (HTS): ${pangolinStakingPositionsHTSAddress}`);
     deployment['SSS NFT (HTS)'] = pangolinStakingPositionsHTSAddress;
 
-    // RewardFundingForwarder (PangolinStakingPositions)
-    const createPangolinStakingPositionsRewardFundingForwarderTx = await new ContractCreateFlow()
-        .setBytecode(rewardFundingForwarderContract.bytecode)
-        .setConstructorParameters(
-            new ContractFunctionParameters()
-                .addAddress(pangolinStakingPositionsAddress) // pangolinStakingPositions
-        )
-        .setGas(900_000)
-        .execute(client);
-    const createPangolinStakingPositionsRewardFundingForwarderRx = await createPangolinStakingPositionsRewardFundingForwarderTx.getReceipt(client);
-    const pangolinStakingPositionsRewardFundingForwarderId = createPangolinStakingPositionsRewardFundingForwarderRx.contractId;
-    const pangolinStakingPositionsRewardFundingForwarderAddress = `0x${AccountId.fromString(pangolinStakingPositionsRewardFundingForwarderId).toSolidityAddress()}`;
-    console.log(`RewardFundingForwarder (PangolinStakingPositions): ${pangolinStakingPositionsRewardFundingForwarderAddress}`);
-    deployment['RewardFundingForwarder (PangolinStakingPositions)'] = pangolinStakingPositionsRewardFundingForwarderAddress;
-
     // EmissionDiversionFromPangoChefToPangolinStakingPositions
     console.log(`Deploying EmissionDiversionFromPangoChefToPangolinStakingPositions ...`);
     const createEmissionDiversionFromPangoChefToPangolinStakingPositionsTx = await new ContractCreateFlow()
@@ -295,6 +315,7 @@ async function main() {
     const emissionDiversionFromPangoChefToPangolinStakingPositionsId = createEmissionDiversionFromPangoChefToPangolinStakingPositionsRx.contractId;
     const emissionDiversionFromPangoChefToPangolinStakingPositionsAddress = `0x${AccountId.fromString(emissionDiversionFromPangoChefToPangolinStakingPositionsId).toSolidityAddress()}`;
     console.log(`EmissionDiversionFromPangoChefToPangolinStakingPositions ${emissionDiversionFromPangoChefToPangolinStakingPositionsId} (${emissionDiversionFromPangoChefToPangolinStakingPositionsAddress})`);
+    deployment['EmissionDiversionFromPangoChefToPangolinStakingPositions'] = emissionDiversionFromPangoChefToPangolinStakingPositionsAddress;
 
     // GovernorAssistant
     const createGovernorAssistantTx = await new ContractCreateFlow()
@@ -418,6 +439,20 @@ async function main() {
     const approvePangoChefRewardFundingForwarderRx = await approvePangoChefRewardFundingForwarderTx.getReceipt(client);
     console.log(`Setup approval for RewardFundingForwarder (PangoChef)`);
 
+    const initializeEmissionDiversionFarmTx = await new ContractExecuteTransaction()
+        .setContractId(pangoChefId)
+        .setFunction('initializePool',
+            new ContractFunctionParameters()
+                .addAddress(emissionDiversionFromPangoChefToPangolinStakingPositionsAddress) // tokenOrRecipient
+                .addAddress('0x0000000000000000000000000000000000000000') // pairContract
+                .addUint8(2) // poolType
+        )
+        .setGas(200_000)
+        .execute(client);
+    const initializeEmissionDiversionFarmRx = await initializeEmissionDiversionFarmTx.getReceipt(client);
+    console.log(`Initialized emission diversion farm`);
+
+    await grantRole(pangoChefId, ROLES.FUNDER_ROLE, vestingBotAddress);
     await grantRole(pangoChefId, ROLES.FUNDER_ROLE, pangoChefRewardFundingForwarderAddress);
     await grantRole(pangoChefId, ROLES.FUNDER_ROLE, multisigAddress);
     await grantRole(pangoChefId, ROLES.POOL_MANAGER_ROLE, multisigAddress);
@@ -429,14 +464,6 @@ async function main() {
 
     console.log('============================== CONFIGURATION: STAKING POSITIONS ==============================');
 
-    const approvePangolinStakingPositionsRewardFundingForwarderTx = await new ContractExecuteTransaction()
-        .setContractId(pangolinStakingPositionsRewardFundingForwarderId)
-        .setFunction('approve')
-        .setGas(900_000)
-        .execute(client);
-    const approvePangolinStakingPositionsRewardFundingForwarderRx = await approvePangolinStakingPositionsRewardFundingForwarderTx.getReceipt(client);
-    console.log(`Setup approval for RewardFundingForwarder (PangolinStakingPositions)`);
-
     const approveEmissionDiversionFromPangoChefToPangolinStakingPositionsTx = await new ContractExecuteTransaction()
         .setContractId(emissionDiversionFromPangoChefToPangolinStakingPositionsId)
         .setFunction('approve')
@@ -445,8 +472,8 @@ async function main() {
     const approveEmissionDiversionFromPangoChefToPangolinStakingPositionsRx = await approveEmissionDiversionFromPangoChefToPangolinStakingPositionsTx.getReceipt(client);
     console.log(`Setup approval for EmissionDiversionFromPangoChefToPangolinStakingPositions`);
 
-    // await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, feeCollectorAddress); // TODO: implement FeeCollector
-    await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, pangolinStakingPositionsRewardFundingForwarderAddress);
+    await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, vestingBotAddress);
+    await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, emissionDiversionFromPangoChefToPangolinStakingPositionsAddress);
     await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, multisigAddress);
     await grantRole(pangolinStakingPositionsId, ROLES.DEFAULT_ADMIN_ROLE, multisigAddress);
 
