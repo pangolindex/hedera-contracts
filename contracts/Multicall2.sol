@@ -16,6 +16,8 @@ contract Multicall2 {
         bytes returnData;
     }
 
+    receive() external payable {}
+
     function aggregate(Call[] memory calls) public returns (uint256 blockNumber, bytes[] memory returnData) {
         blockNumber = block.number;
         returnData = new bytes[](calls.length);

@@ -26,6 +26,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
     address public immutable override factory;
     address public override token0;
     address public override token1;
+    address public override coreFeeCollector;
 
     address public override pairToken;
 
@@ -58,6 +59,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
 
     constructor() public {
         factory = msg.sender;
+        coreFeeCollector = IPangolinFactory(msg.sender).coreFeeCollector();
     }
 
     // called once by the factory at time of deployment
@@ -67,7 +69,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
         address[] memory tokens = new address[](2);
         tokens[0] = _token0;
         tokens[1] = _token1;
-        int associateResponseCode = associateTokens(address(this), tokens);
+        int associateResponseCode = HederaTokenService.associateTokens(address(this), tokens);
         require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Pangolin: INVALID_TOKEN');
 
         token0 = _token0;
@@ -95,10 +97,10 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
         token.symbol = "PGL";
         token.treasury = address(this); // also associates token?
         token.tokenKeys = keys;
-        token.expiry = createAutoRenewExpiry(address(this), 90 days);
+        token.expiry = ExpiryHelper.createAutoRenewExpiry(address(this), 90 days);
 
         // Create the token, with zero initial supply, and zero decimals.
-        (int256 tokenCreateResponseCode, address tokenId) = createFungibleToken(token, 0, uint32(0));
+        (int256 tokenCreateResponseCode, address tokenId) = HederaTokenService.createFungibleToken(token, 0, uint32(0));
         require(tokenCreateResponseCode == HederaResponseCodes.SUCCESS, "Token creation failed");
 
         // Set the immutable state variables for the pair token.
@@ -109,9 +111,9 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
 
     function _mint(address to, uint amount) private {
         assert(amount <= MAXIMUM_HEDERA_TOKEN_SUPPLY);
-        (int256 mintResponseCode,,) = mintToken(pairToken, uint64(amount), new bytes[](0));
+        (int256 mintResponseCode,,) = HederaTokenService.mintToken(pairToken, uint64(amount), new bytes[](0));
         require(mintResponseCode == HederaResponseCodes.SUCCESS, "Mint failed");
-        int256 transferResponseCode = transferToken(pairToken, address(this), to, int64(uint64(amount)));
+        int256 transferResponseCode = HederaTokenService.transferToken(pairToken, address(this), to, int64(uint64(amount)));
         require(transferResponseCode == HederaResponseCodes.SUCCESS, "Transfer failed");
         emit LogicalMint(to, amount);
     }
@@ -119,7 +121,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
     function _burn(address from, uint amount) private {
         assert(from == address(this));
         assert(amount <= MAXIMUM_HEDERA_TOKEN_SUPPLY);
-        (int256 burnResponseCode,) = burnToken(pairToken, uint64(amount), new int64[](0));
+        (int256 burnResponseCode,) = HederaTokenService.burnToken(pairToken, uint64(amount), new int64[](0));
         require(burnResponseCode == HederaResponseCodes.SUCCESS, "Burn failed");
         emit LogicalBurn(from, amount);
     }
@@ -153,7 +155,7 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
                     uint numerator = IERC20(pairToken).totalSupply().mul(rootK.sub(rootKLast));
                     uint denominator = rootK.mul(5).add(rootKLast);
                     uint liquidity = numerator / denominator;
-                    if (liquidity > 0) _mint(feeTo, liquidity);
+                    if (liquidity > 0) _mint(coreFeeCollector, liquidity);
                 }
             }
         } else if (_kLast != 0) {
@@ -253,4 +255,6 @@ contract PangolinPair is IPangolinPair, HederaTokenService, ExpiryHelper {
     function sync() external override lock {
         _update(IERC20(token0).balanceOf(address(this)), IERC20(token1).balanceOf(address(this)), reserve0, reserve1);
     }
+
+    receive() external payable {}
 }

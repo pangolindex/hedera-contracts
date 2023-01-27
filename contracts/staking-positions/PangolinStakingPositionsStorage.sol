@@ -20,4 +20,6 @@ contract PangolinStakingPositionsStorage is Ownable {
     function deletePosition(uint256 positionId) external onlyOwner {
         delete _positions[positionId];
     }
+
+    receive() external payable {}
 }

@@ -4,17 +4,19 @@ pragma solidity =0.6.12;
 import './interfaces/IContractSizeChecker.sol';
 import './interfaces/IPangolinFactory.sol';
 import './PangolinPair.sol';
-import './LogicalBurn.sol';
+import './CoreFeeCollector.sol';
 
 contract PangolinFactory is IPangolinFactory, HederaTokenService {
     address public override feeTo;
     address public override feeToSetter;
+    address public immutable override coreFeeCollector;
     uint public override allPairsLength;
 
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
     constructor(address _feeToSetter) public {
         feeToSetter = _feeToSetter;
+        coreFeeCollector = address(new CoreFeeCollector());
     }
 
     function getPair(address tokenA, address tokenB) public view override returns (address pair) {
@@ -46,8 +48,9 @@ contract PangolinFactory is IPangolinFactory, HederaTokenService {
         }
         require(pair != address(0), 'Pangolin: PAIR_EXISTS');
         address pairToken = IPangolinPair(pair).initialize{ value: msg.value }(token0, token1);
-        int associateResponseCode = associateToken(address(this), pairToken);
-        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Pangolin: ASSOCATION_FAILED');
+        int associateResponseCode = HederaTokenService.associateToken(address(this), pairToken);
+        require(associateResponseCode == HederaResponseCodes.SUCCESS, 'Pangolin: ASSOCIATION_FAILED');
+        ICoreFeeCollector(coreFeeCollector).associate(pairToken);
         emit PairCreated(token0, token1, pair, allPairsLength++);
     }
 
@@ -60,4 +63,6 @@ contract PangolinFactory is IPangolinFactory, HederaTokenService {
         require(msg.sender == feeToSetter, 'Pangolin: FORBIDDEN');
         feeToSetter = _feeToSetter;
     }
+
+    receive() external payable {}
 }

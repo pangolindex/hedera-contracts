@@ -12,3 +12,6 @@ artifacts
 # IDE
 .idea/
 .vscode/
+
+# partial deployments
+deployments/*@*.json

@@ -115,8 +115,7 @@ abstract contract PangoChefFunding is AccessControlEnumerable, GenericErrors, He
         totalWeight = INITIAL_WEIGHT;
 
         // Associate Hedera native token to this address (i.e.: allow this contract to hold the token).
-        int responseCode = associateToken(address(this), newRewardsToken);
-        require(responseCode == HederaResponseCodes.SUCCESS, 'Assocation failed');
+        safeAssociate(newRewardsToken);
     }
 
     /**
@@ -287,6 +286,14 @@ abstract contract PangoChefFunding is AccessControlEnumerable, GenericErrors, He
         return 0;
     }
 
+    function safeAssociate(address token) internal {
+        int responseCode = HederaTokenService.associateToken(address(this), token);
+        if (
+            responseCode != HederaResponseCodes.SUCCESS &&
+            responseCode != HederaResponseCodes.TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT
+        ) revert InvalidToken();
+    }
+
     /**
      * @notice Internal function to get the amount of reward tokens to distribute to a pool since
      *         the last call for the same pool was made to this function.
@@ -318,7 +325,6 @@ abstract contract PangoChefFunding is AccessControlEnumerable, GenericErrors, He
             uint256 rewardPerWeightPayable = rewardPerWeight - pool.rewardPerWeightPaid;
             rewards =
                 pool.stashedRewards + ((pool.weight * rewardPerWeightPayable) / WEIGHT_PRECISION);
-            assert(rewards <= type(uint96).max);
         }
     }
 
