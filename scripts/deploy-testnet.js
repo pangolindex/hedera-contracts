@@ -36,6 +36,7 @@ async function main() {
     const HBAR_USD_PRICE = Number.parseFloat(process.env.HBAR_USD_PRICE || '0.07');
     const MULTISIG_ACCOUNT_ID = process.env.MULTISIG_ACCOUNT_ID;
     const VESTING_BOT_ID = process.env.VESTING_BOT_ID;
+    const MULTICALL_ID = process.env.MULTICALL_ID;
 
     const TIMELOCK_DELAY = 86_400 * 2; // 2 days
 
@@ -44,6 +45,7 @@ async function main() {
 
     const deployment = {};
 
+    const multicall2Contract = await ethers.getContractFactory('Multicall2');
     const wrappedNativeTokenContract = await ethers.getContractFactory('WHBAR');
     const communityTreasury = await ethers.getContractFactory('CommunityTreasury');
     const treasuryVesterContract = await ethers.getContractFactory('TreasuryVester');
@@ -106,6 +108,25 @@ async function main() {
     deployment['Multisig'] = multisigAddress;
 
     console.log('============================== DEPLOYMENT ==============================');
+
+    // Multicall2
+    let multicall2Id;
+    let multicall2Address;
+    if (!MULTICALL_ID) {
+        console.log(`Deploying Multicall2 ...`);
+        const createMulticall2Tx = await new ContractCreateFlow()
+            .setBytecode(multicall2Contract.bytecode)
+            .setGas(200_000)
+            .setInitialBalance(new Hbar(10))
+            .execute(client);
+        const createMulticall2Rx = await createMulticall2Tx.getReceipt(client);
+        multicall2Id = createMulticall2Rx.contractId;
+    } else {
+        multicall2Id = MULTICALL_ID;
+    }
+    multicall2Address = `0x${AccountId.fromString(multicall2Id).toSolidityAddress()}`;
+    console.log(`Multicall: ${multicall2Address}`);
+    deployment['Multicall'] = multicall2Address;
 
     // WHBAR
     let wrappedNativeTokenContractId;
@@ -314,7 +335,7 @@ async function main() {
     const createEmissionDiversionFromPangoChefToPangolinStakingPositionsRx = await createEmissionDiversionFromPangoChefToPangolinStakingPositionsTx.getReceipt(client);
     const emissionDiversionFromPangoChefToPangolinStakingPositionsId = createEmissionDiversionFromPangoChefToPangolinStakingPositionsRx.contractId;
     const emissionDiversionFromPangoChefToPangolinStakingPositionsAddress = `0x${AccountId.fromString(emissionDiversionFromPangoChefToPangolinStakingPositionsId).toSolidityAddress()}`;
-    console.log(`EmissionDiversionFromPangoChefToPangolinStakingPositions ${emissionDiversionFromPangoChefToPangolinStakingPositionsId} (${emissionDiversionFromPangoChefToPangolinStakingPositionsAddress})`);
+    console.log(`EmissionDiversionFromPangoChefToPangolinStakingPositions: ${emissionDiversionFromPangoChefToPangolinStakingPositionsAddress}`);
     deployment['EmissionDiversionFromPangoChefToPangolinStakingPositions'] = emissionDiversionFromPangoChefToPangolinStakingPositionsAddress;
 
     // GovernorAssistant
