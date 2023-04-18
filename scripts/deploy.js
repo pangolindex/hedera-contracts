@@ -34,10 +34,10 @@ async function main() {
     // Optional environment variables
     const WHBAR_CONTRACT_ID = process.env.WHBAR_CONTRACT_ID;
     const START_VESTING = (process.env.START_VESTING ?? 'false').toLowerCase() === 'true';
-    const HBAR_USD_PRICE = Number.parseFloat(process.env.HBAR_USD_PRICE ?? '0.06');
+    const HBAR_USD_PRICE = Number.parseFloat(process.env.HBAR_USD_PRICE || '0.06');
     const MULTISIG_ACCOUNT_ID = process.env.MULTISIG_ACCOUNT_ID;
     const VESTING_BOT_ID = process.env.VESTING_BOT_ID;
-    const TIMELOCK_DELAY = Number.parseInt(process.env.TIMELOCK_DELAY ?? (86_400 * 2)); // 2 days
+    const TIMELOCK_DELAY = Number.parseInt(process.env.TIMELOCK_DELAY || (86_400 * 2)); // 2 days
 
     if (process.env.NETWORK === 'testnet') {
         client = Client.forTestnet();
