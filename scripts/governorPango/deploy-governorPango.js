@@ -10,7 +10,7 @@ async function main() {
     const myPrivateKey = process.env.MY_PRIVATE_KEY;
     if (!myPrivateKey) throw new Error(`Missing MY_PRIVATE_KEY`);
 
-    const timelockDelay = process.env.TIMELOCK_DELAY;
+    const timelockDelay = process.env.TIMELOCK_DELAY ?? (86_400 * 2);
     if (!timelockDelay) throw new Error(`Missing TIMELOCK_DELAY`);
 
     const stakingContractId = process.env.STAKING_CONTRACT_ID;
@@ -25,7 +25,6 @@ async function main() {
     // Get contracts
     const timelockContract = await ethers.getContractFactory('Timelock');
     const governorContract = await ethers.getContractFactory('Governor');
-    const governorAssistantContract = await ethers.getContractFactory('GovernorAssistant');
 
     console.log('Deploying Timelock contract ...');
     const timelockTx = await new ContractCreateFlow()
@@ -42,21 +41,10 @@ async function main() {
     const timelockAddress = `0x${AccountId.fromString(timelockId).toSolidityAddress()}`;
     console.log(`Deployed Timelock at ${timelockId} (${timelockAddress})`);
 
-    console.log(`Deploying GovernorAssistant ...`);
-    const governorAssistantTx = await new ContractCreateFlow()
-        .setBytecode(governorAssistantContract.bytecode)
-        .setGas(100000)
-        .execute(client);
-    const governorAssistantRx = await governorAssistantTx.getReceipt(client);
-    const governorAssistantId = governorAssistantRx.contractId;
-    const governorAssistantAddress = `0x${AccountId.fromString(governorAssistantId).toSolidityAddress()}`;
-    console.log(`Deployed GovernorAssistant: ${governorAssistantId} (${governorAssistantAddress})`);
-
-    console.log(`Deploying Governor ...`);
+    console.log(`Deploying GovernorPango ...`);
     const governorTx = await new ContractCreateFlow()
         .setBytecode(governorContract.bytecode)
         .setConstructorParameters(new ContractFunctionParameters()
-            .addAddress(AccountId.fromString(governorAssistantId).toSolidityAddress()) // assistant
             .addAddress(AccountId.fromString(timelockId).toSolidityAddress()) // timelock
             .addAddress(AccountId.fromString(stakingNftId).toSolidityAddress()) // PangolinStakingPositions HTS NFT
             .addAddress(AccountId.fromString(stakingContractId).toSolidityAddress()) // PangolinStakingPositions contract
@@ -66,7 +54,7 @@ async function main() {
     const governorRx = await governorTx.getReceipt(client);
     const governorId = governorRx.contractId;
     const governorAddress = `0x${AccountId.fromString(governorId).toSolidityAddress()}`;
-    console.log(`Deployed Governor: ${governorId} (${governorAddress})`);
+    console.log(`Deployed GovernorPango: ${governorId} (${governorAddress})`);
 
     console.log('Done!');
 }

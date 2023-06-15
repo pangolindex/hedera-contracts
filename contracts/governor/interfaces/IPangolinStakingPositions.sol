@@ -1,7 +1,5 @@
 pragma solidity >=0.8.0;
 
-//import "../../staking-positions/PangolinStakingPositionsStructs.sol";
-
 // SPDX-License-Identifier: MIT
 interface IPangolinStakingPositions {
     struct ValueVariables {
