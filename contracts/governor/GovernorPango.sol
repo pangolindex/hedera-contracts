@@ -62,7 +62,7 @@ contract GovernorPango is GovernorPangoAssistant, HTS_Governor {
         Executed
     }
 
-    event ProposalCreated(uint64 id, address[] targets, uint256[] values, string[] signatures, bytes[] calldatas, uint40 startTime, uint40 endTime, string description);
+    event ProposalCreated(uint64 id, int64 proposer, address[] targets, uint256[] values, string[] signatures, bytes[] calldatas, uint40 startTime, uint40 endTime, string description);
     event ProposalCanceled(uint64 id);
     event VoteCast(uint64 proposalId, bool support, uint96 votes);
     event ProposalQueued(uint64 id, uint40 eta);
@@ -142,7 +142,7 @@ contract GovernorPango is GovernorPangoAssistant, HTS_Governor {
 
         IProposalStorage(GovernorPangoAssistant.createProposal(proposalId)).init(newProposal);
 
-        emit ProposalCreated(proposalId, targets, values, signatures, calldatas, startTime, endTime, description);
+        emit ProposalCreated(proposalId, nftId, targets, values, signatures, calldatas, startTime, endTime, description);
     }
 
     /*
