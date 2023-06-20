@@ -30,9 +30,9 @@ contract GovernorPango is GovernorPangoAssistant, HTS_Governor {
 
     /// @notice The number of votes required in order for a voter to become a proposer
     /// @dev Can be changed via vote within the range: [PROPOSAL_THRESHOLD_MIN, PROPOSAL_THRESHOLD_MAX]
-    uint96 public PROPOSAL_THRESHOLD = 2_000_000e8;
-    uint96 public constant PROPOSAL_THRESHOLD_MIN = 500_000e8;
-    uint96 public constant PROPOSAL_THRESHOLD_MAX = 50_000_000e8;
+    uint96 public PROPOSAL_THRESHOLD;
+    uint96 public immutable PROPOSAL_THRESHOLD_MIN;
+    uint96 public immutable PROPOSAL_THRESHOLD_MAX;
 
     /// @notice The address of the timelock
     ITimelock public immutable TIMELOCK;
@@ -82,13 +82,22 @@ contract GovernorPango is GovernorPangoAssistant, HTS_Governor {
     receive() external payable {}
 
     constructor(
-        address _timelock,
-        address _nft,
-        address _nftContract
+        address _TIMELOCK,
+        address _NFT_TOKEN,
+        address _NFT_CONTRACT,
+        uint96 _PROPOSAL_THRESHOLD,
+        uint96 _PROPOSAL_THRESHOLD_MIN,
+        uint96 _PROPOSAL_THRESHOLD_MAX
     ) {
-        TIMELOCK = ITimelock(_timelock);
-        NFT_TOKEN = _nft;
-        NFT_CONTRACT = _nftContract;
+        if (_PROPOSAL_THRESHOLD_MIN > _PROPOSAL_THRESHOLD_MAX) revert InvalidAction();
+        if (_PROPOSAL_THRESHOLD < _PROPOSAL_THRESHOLD_MIN) revert InvalidAction();
+        if (_PROPOSAL_THRESHOLD > _PROPOSAL_THRESHOLD_MAX) revert InvalidAction();
+        TIMELOCK = ITimelock(_TIMELOCK);
+        NFT_TOKEN = _NFT_TOKEN;
+        NFT_CONTRACT = _NFT_CONTRACT;
+        PROPOSAL_THRESHOLD = _PROPOSAL_THRESHOLD;
+        PROPOSAL_THRESHOLD_MIN = _PROPOSAL_THRESHOLD_MIN;
+        PROPOSAL_THRESHOLD_MAX = _PROPOSAL_THRESHOLD_MAX;
     }
 
     /*
