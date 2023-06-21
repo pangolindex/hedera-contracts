@@ -15,3 +15,7 @@ artifacts
 
 # partial deployments
 deployments/*@*.json
+
+# airdrops
+scripts/airdrop/*.csv
+scripts/airdrop/output
