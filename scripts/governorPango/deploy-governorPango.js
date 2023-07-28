@@ -15,10 +15,10 @@ async function main() {
 
     let timelockId = process.env.TIMELOCK_ID;
 
-    const timelockDelay = process.env.TIMELOCK_DELAY ?? (86_400 * 2);
-    const proposalThreshold = process.env.PROPOSAL_THRESHOLD ?? (2_000_000e8);
-    const proposalThresholdMin = process.env.PROPOSAL_THRESHOLD_MIN ?? (500_000e8);
-    const proposalThresholdMax = process.env.PROPOSAL_THRESHOLD_MAX ?? (50_000_000e8);
+    const timelockDelay = eval(process.env.TIMELOCK_DELAY) ?? (86_400 * 2);
+    const proposalThreshold = eval(process.env.PROPOSAL_THRESHOLD) ?? (2_000_000e8);
+    const proposalThresholdMin = eval(process.env.PROPOSAL_THRESHOLD_MIN) ?? (1_000_000e8);
+    const proposalThresholdMax = eval(process.env.PROPOSAL_THRESHOLD_MAX) ?? (115_000_000e8);
 
     const stakingContractId = process.env.STAKING_CONTRACT_ID;
     if (!stakingContractId) throw new Error(`Missing STAKING_CONTRACT_ID`);
