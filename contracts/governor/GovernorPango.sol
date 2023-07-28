@@ -1,15 +1,15 @@
 pragma solidity =0.8.15;
 
-import "./interfaces/IGovernorAssistant.sol";
+import "./interfaces/IPangolinStakingPositions.sol";
 import "./interfaces/IProposalStorage.sol";
 import "./interfaces/ITimelock.sol";
-import "./interfaces/IPangolinStakingPositions.sol";
 
+import "./GovernorPangoAssistant.sol";
 import "./precompiles/HTS_Governor.sol";
 
 // SPDX-License-Identifier: MIT
 /*
- * @notice Governor is an adaptation of GovernorAlpha intended to work with PangolinStakingPositions NFTs
+ * @notice GovernorPango is an adaptation of GovernorAlpha intended to work with PangolinStakingPositions NFTs
  *         on the Hedera blockchain. The proposal lifecycle is the same as GovernorAlpha but additional
  *         restrictions are imposed:
  *
@@ -19,7 +19,7 @@ import "./precompiles/HTS_Governor.sol";
  *         4) An NFT cannot be used for voting on the same proposal multiple times, regardless of ownership
  *         5) The proposer is always allowed to cancel the proposal before voting begins
  */
-contract Governor is HTS_Governor {
+contract GovernorPango is GovernorPangoAssistant, HTS_Governor {
     /// @notice The delay before voting on a proposal may take place, once proposed
     /// @dev Can be changed via vote within the range: [1 days, 7 days]
     uint40 public VOTING_DELAY = 1 days;
@@ -29,10 +29,10 @@ contract Governor is HTS_Governor {
     uint40 public VOTING_PERIOD = 3 days;
 
     /// @notice The number of votes required in order for a voter to become a proposer
-    uint96 public constant PROPOSAL_THRESHOLD = 1_000_000e8;
-
-    /// @notice The helper contract responsible for creating/locating proposals and receipts
-    IGovernorAssistant public immutable ASSISTANT;
+    /// @dev Can be changed via vote within the range: [PROPOSAL_THRESHOLD_MIN, PROPOSAL_THRESHOLD_MAX]
+    uint96 public PROPOSAL_THRESHOLD;
+    uint96 public immutable PROPOSAL_THRESHOLD_MIN;
+    uint96 public immutable PROPOSAL_THRESHOLD_MAX;
 
     /// @notice The address of the timelock
     ITimelock public immutable TIMELOCK;
@@ -62,11 +62,12 @@ contract Governor is HTS_Governor {
         Executed
     }
 
-    event ProposalCreated(uint64 id, address[] targets, uint256[] values, string[] signatures, bytes[] calldatas, uint40 startTime, uint40 endTime, string description);
+    event ProposalCreated(uint64 id, int64 proposer, address[] targets, uint256[] values, string[] signatures, bytes[] calldatas, uint40 startTime, uint40 endTime, string description);
     event ProposalCanceled(uint64 id);
     event VoteCast(uint64 proposalId, bool support, uint96 votes);
     event ProposalQueued(uint64 id, uint40 eta);
     event ProposalExecuted(uint64 id);
+    event ProposalThresholdChanged(uint96 newProposalThreshold);
     event VotingDelayChanged(uint40 newVotingDelay);
     event VotingPeriodChanged(uint40 newVotingPeriod);
 
@@ -81,15 +82,22 @@ contract Governor is HTS_Governor {
     receive() external payable {}
 
     constructor(
-        address _assistant,
-        address _timelock,
-        address _nft,
-        address _nftContract
+        address _TIMELOCK,
+        address _NFT_TOKEN,
+        address _NFT_CONTRACT,
+        uint96 _PROPOSAL_THRESHOLD,
+        uint96 _PROPOSAL_THRESHOLD_MIN,
+        uint96 _PROPOSAL_THRESHOLD_MAX
     ) {
-        ASSISTANT = IGovernorAssistant(_assistant);
-        TIMELOCK = ITimelock(_timelock);
-        NFT_TOKEN = _nft;
-        NFT_CONTRACT = _nftContract;
+        if (_PROPOSAL_THRESHOLD_MIN > _PROPOSAL_THRESHOLD_MAX) revert InvalidAction();
+        if (_PROPOSAL_THRESHOLD < _PROPOSAL_THRESHOLD_MIN) revert InvalidAction();
+        if (_PROPOSAL_THRESHOLD > _PROPOSAL_THRESHOLD_MAX) revert InvalidAction();
+        TIMELOCK = ITimelock(_TIMELOCK);
+        NFT_TOKEN = _NFT_TOKEN;
+        NFT_CONTRACT = _NFT_CONTRACT;
+        PROPOSAL_THRESHOLD = _PROPOSAL_THRESHOLD;
+        PROPOSAL_THRESHOLD_MIN = _PROPOSAL_THRESHOLD_MIN;
+        PROPOSAL_THRESHOLD_MAX = _PROPOSAL_THRESHOLD_MAX;
     }
 
     /*
@@ -132,9 +140,9 @@ contract Governor is HTS_Governor {
         newProposal.startTime = startTime;
         newProposal.endTime = endTime;
 
-        IProposalStorage(ASSISTANT.createProposal(proposalId)).init(newProposal);
+        IProposalStorage(GovernorPangoAssistant.createProposal(proposalId)).init(newProposal);
 
-        emit ProposalCreated(proposalId, targets, values, signatures, calldatas, startTime, endTime, description);
+        emit ProposalCreated(proposalId, nftId, targets, values, signatures, calldatas, startTime, endTime, description);
     }
 
     /*
@@ -142,7 +150,7 @@ contract Governor is HTS_Governor {
      *      Proposals can also be canceled by the owner of the proposal's proposing NFT before voting begins
      */
     function cancel(uint64 proposalId) external {
-        address proposalLocation = ASSISTANT.locateProposal(address(this), proposalId);
+        address proposalLocation = GovernorPangoAssistant.locateProposal(proposalId);
         IProposalStorage.Proposal memory proposal = IProposalStorage(proposalLocation).getProposal();
         ProposalState proposalState = _state(proposal);
         if (proposalState == ProposalState.Executed) revert InvalidState();
@@ -163,7 +171,7 @@ contract Governor is HTS_Governor {
     }
 
     function castVote(uint64 proposalId, bool support, int64 nftId) external {
-        address proposalLocation = ASSISTANT.locateProposal(address(this), proposalId);
+        address proposalLocation = GovernorPangoAssistant.locateProposal(proposalId);
         IProposalStorage.Proposal memory proposal = IProposalStorage(proposalLocation).getProposal();
         if (_state(proposal) != ProposalState.Active) revert InvalidState();
 
@@ -174,7 +182,7 @@ contract Governor is HTS_Governor {
         if (votes == 0) revert InsufficientVotes();
 
         // Verify NFT can only vote once
-        if (ASSISTANT.createReceipt(proposalId, nftId) == address(0)) revert IllegalVote();
+        if (GovernorPangoAssistant.createReceipt(proposalId, nftId) == address(0)) revert IllegalVote();
 
         // Cast vote
         IProposalStorage(proposalLocation).castVotes(votes, support);
@@ -183,7 +191,7 @@ contract Governor is HTS_Governor {
     }
 
     function queue(uint64 proposalId) external {
-        address proposalLocation = ASSISTANT.locateProposal(address(this), proposalId);
+        address proposalLocation = GovernorPangoAssistant.locateProposal(proposalId);
         IProposalStorage.Proposal memory proposal = IProposalStorage(proposalLocation).getProposal();
         if (_state(proposal) != ProposalState.Succeeded) revert InvalidState();
 
@@ -205,7 +213,7 @@ contract Governor is HTS_Governor {
     }
 
     function execute(uint64 proposalId) external payable {
-        address proposalLocation = ASSISTANT.locateProposal(address(this), proposalId);
+        address proposalLocation = GovernorPangoAssistant.locateProposal(proposalId);
         IProposalStorage.Proposal memory proposal = IProposalStorage(proposalLocation).getProposal();
         if (_state(proposal) != ProposalState.Queued) revert InvalidState();
 
@@ -221,7 +229,7 @@ contract Governor is HTS_Governor {
     }
 
     function state(uint64 proposalId) external view returns (ProposalState) {
-        return _state(IProposalStorage(ASSISTANT.locateProposal(address(this), proposalId)).getProposal());
+        return _state(IProposalStorage(GovernorPangoAssistant.locateProposal(proposalId)).getProposal());
     }
 
     function _state(IProposalStorage.Proposal memory proposal) private view returns (ProposalState) {
@@ -267,6 +275,14 @@ contract Governor is HTS_Governor {
 
     function __acceptAdmin() external {
         TIMELOCK.acceptAdmin();
+    }
+
+    function __setProposalThreshold(uint96 newProposalThreshold) external {
+        if (msg.sender != address(TIMELOCK)) revert InvalidAction();
+        if (newProposalThreshold < PROPOSAL_THRESHOLD_MIN) revert InvalidAction();
+        if (newProposalThreshold > PROPOSAL_THRESHOLD_MAX) revert InvalidAction();
+        PROPOSAL_THRESHOLD = newProposalThreshold;
+        emit ProposalThresholdChanged(newProposalThreshold);
     }
 
     function __setVotingDelay(uint40 newVotingDelay) external {
