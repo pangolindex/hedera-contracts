@@ -12,7 +12,7 @@ abstract contract GovernorPangoAssistant {
     function createProposal(uint64 proposalId) internal returns (address) {
         return _create2(
             keccak256(abi.encodePacked(proposalId)),
-            abi.encodePacked(type(ProposalStorage).creationCode, abi.encode(msg.sender))
+            abi.encodePacked(type(ProposalStorage).creationCode, abi.encode(address(this)))
         );
     }
 
@@ -33,7 +33,7 @@ abstract contract GovernorPangoAssistant {
     function createReceipt(uint64 proposalId, int64 nftId) internal returns (address) {
         return _create2(
             keccak256(abi.encodePacked(proposalId, nftId)),
-            abi.encodePacked(type(ReceiptStorage).creationCode, abi.encode(msg.sender))
+            abi.encodePacked(type(ReceiptStorage).creationCode)
         );
     }
 
@@ -42,7 +42,7 @@ abstract contract GovernorPangoAssistant {
             bytes1(0xff),
             address(this),
             keccak256(abi.encodePacked(proposalId, nftId)),
-            keccak256(abi.encodePacked(type(ReceiptStorage).creationCode, abi.encode(address(this))))
+            keccak256(abi.encodePacked(type(ReceiptStorage).creationCode))
         ));
         return address(uint160(uint256(hash)));
     }
