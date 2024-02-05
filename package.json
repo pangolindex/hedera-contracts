@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "license": "MIT",
   "dependencies": {
-    "@hashgraph/sdk": "2.31.0",
-    "@openzeppelin/contracts": "4.9.2",
+    "@hashgraph/sdk": "2.40.0",
+    "@openzeppelin/contracts": "4.9.3",
     "@rari-capital/solmate": "6.4.0",
     "dotenv": "16.3.1",
     "hardhat": "2.15.0"

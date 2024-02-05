@@ -18,6 +18,7 @@ const {
     AccountCreateTransaction,
     KeyList,
     TokenAssociateTransaction,
+    ContractId,
 } = require('@hashgraph/sdk');
 require('dotenv').config({path: '../.env'});
 
@@ -35,8 +36,11 @@ async function main() {
     }
 
     // Optional environment variables
-    const HBAR_USD_PRICE = Number.parseFloat(process.env.HBAR_USD_PRICE || '0.06');
-    const TIMELOCK_DELAY = Number.parseInt(process.env.TIMELOCK_DELAY || (86_400 * 2)); // 2 days
+    const HBAR_USD_PRICE = Number.parseFloat(process.env.HBAR_USD_PRICE || '0.07');
+    const TIMELOCK_DELAY = eval(process.env.TIMELOCK_DELAY) ?? (86_400 * 2); // 2 days
+    const PROPOSAL_THRESHOLD = eval(process.env.PROPOSAL_THRESHOLD) ?? (2_000_000e8);
+    const PROPOSAL_THRESHOLD_MIN = eval(process.env.PROPOSAL_THRESHOLD_MIN) ?? (1_000_000e8);
+    const PROPOSAL_THRESHOLD_MAX = eval(process.env.PROPOSAL_THRESHOLD_MAX) ?? (115_000_000e8);
 
     if (process.env.NETWORK === 'testnet') {
         client = Client.forTestnet();
@@ -92,9 +96,10 @@ async function main() {
             .execute(client);
         const newAccountRx = await newAccountTx.getReceipt(client);
         vestingBotAddress = `0x${newAccountRx.accountId.toSolidityAddress()}`;
-        console.log(`Vesting Bot: ${vestingBotAddress}`);
         deployment['Vesting Bot'] = vestingBotAddress;
+        deployment['Vesting Bot PK'] = vestingBotPrivateKey.toStringDer();
         writePartialDeployment();
+        console.log(`Vesting Bot: ${vestingBotAddress}`);
     }
 
     // Multisig
@@ -110,9 +115,9 @@ async function main() {
             .execute(client);
         const createMultisigRx = await createMultisigTx.getReceipt(client);
         multisigAddress = `0x${createMultisigRx.accountId.toSolidityAddress()}`;
-        console.log(`Multisig: ${multisigAddress}`);
         deployment['Multisig'] = multisigAddress;
         writePartialDeployment();
+        console.log(`Multisig: ${multisigAddress}`);
     }
 
     console.log('============================== DEPLOYMENT ==============================');
@@ -123,20 +128,18 @@ async function main() {
         wrappedNativeTokenContractAddress = deployment['WHBAR (Contract)'];
         console.log(`WHBAR (Contract): ${wrappedNativeTokenContractAddress}`);
     } else {
-        console.log(`Deploying WHBAR ...`);
         const createWrappedNativeTokenTx = await new ContractCreateFlow()
             .setBytecode(wrappedNativeTokenContract.bytecode)
-            .setGas(400_000) // 349,451
+            .setGas(500_000)
             .setInitialBalance(new Hbar(Math.ceil(1.10 / HBAR_USD_PRICE))) // $1.00
             .execute(client);
         const createWrappedNativeTokenRx = await createWrappedNativeTokenTx.getReceipt(client);
         wrappedNativeTokenContractAddress = `0x${createWrappedNativeTokenRx.contractId.toSolidityAddress()}`;
-        console.log(`WHBAR (Contract): ${wrappedNativeTokenContractAddress}`);
         deployment['WHBAR (Contract)'] = wrappedNativeTokenContractAddress;
         writePartialDeployment();
+        console.log(`WHBAR (Contract): ${wrappedNativeTokenContractAddress}`);
     }
     const wrappedNativeTokenContractId = AccountId.fromSolidityAddress(wrappedNativeTokenContractAddress).toString();
-
 
     // WHBAR HTS Address
     let wrappedNativeTokenHTSAddress;
@@ -146,13 +149,13 @@ async function main() {
     } else {
         const whbarQueryTx = await new ContractCallQuery()
             .setContractId(wrappedNativeTokenContractId)
-            .setGas(24_000) // 21,204
+            .setGas(25_000)
             .setFunction('TOKEN_ID')
             .execute(client);
         wrappedNativeTokenHTSAddress = `0x${whbarQueryTx.getAddress(0)}`;
-        console.log(`WHBAR (HTS): ${wrappedNativeTokenHTSAddress}`);
         deployment['WHBAR (HTS)'] = wrappedNativeTokenHTSAddress;
         writePartialDeployment();
+        console.log(`WHBAR (HTS): ${wrappedNativeTokenHTSAddress}`);
     }
 
     // Timelock
@@ -168,13 +171,13 @@ async function main() {
                     .addAddress(deployerAddress) // admin
                     .addUint256(TIMELOCK_DELAY) // delay
             )
-            .setGas(100_000)
+            .setGas(200_000)
             .execute(client);
         const createTimelockRx = await createTimelockTx.getReceipt(client);
         timelockAddress = `0x${createTimelockRx.contractId.toSolidityAddress()}`;
-        console.log(`Timelock: ${timelockAddress}`);
         deployment['Timelock'] = timelockAddress;
         writePartialDeployment();
+        console.log(`Timelock: ${timelockAddress}`);
     }
     const timelockId = AccountId.fromSolidityAddress(timelockAddress).toString();
 
@@ -190,14 +193,14 @@ async function main() {
                 new ContractFunctionParameters()
                     .addAddress(deployerAddress) // admin (deployer for now and will be set to Multisig later)
             )
-            .setGas(700_000) // 657,136
+            .setGas(1_200_000)
             .setInitialBalance(new Hbar(Math.ceil(1.10 / HBAR_USD_PRICE))) // $0.90
             .execute(client);
         const createTreasuryVesterRx = await createTreasuryVesterTx.getReceipt(client);
         treasuryVesterAddress = `0x${createTreasuryVesterRx.contractId.toSolidityAddress()}`;
-        console.log(`TreasuryVester: ${treasuryVesterAddress}`);
         deployment['TreasuryVester'] = treasuryVesterAddress;
         writePartialDeployment();
+        console.log(`TreasuryVester: ${treasuryVesterAddress}`);
     }
     const treasuryVesterId = AccountId.fromSolidityAddress(treasuryVesterAddress).toString();
 
@@ -209,13 +212,13 @@ async function main() {
     } else {
         const pngQueryTx = await new ContractCallQuery()
             .setContractId(treasuryVesterId)
-            .setGas(24_000) // 21,284
+            .setGas(30_000)
             .setFunction('PNG')
             .execute(client);
         pngHTSAddress = `0x${pngQueryTx.getAddress(0)}`;
-        console.log(`PNG (HTS): ${pngHTSAddress}`);
         deployment['PNG (HTS)'] = pngHTSAddress;
         writePartialDeployment();
+        console.log(`PNG (HTS): ${pngHTSAddress}`);
     }
 
     // CommunityTreasury
@@ -230,13 +233,13 @@ async function main() {
                 new ContractFunctionParameters()
                     .addAddress(pngHTSAddress)
             )
-            .setGas(900_000) // 788,308
+            .setGas(1_000_000)
             .execute(client);
         const createCommunityTreasuryRx = await createCommunityTreasuryTx.getReceipt(client);
         communityTreasuryAddress = `0x${createCommunityTreasuryRx.contractId.toSolidityAddress()}`;
-        console.log(`CommunityTreasury: ${communityTreasuryAddress}`);
         deployment['CommunityTreasury'] = communityTreasuryAddress;
         writePartialDeployment();
+        console.log(`CommunityTreasury: ${communityTreasuryAddress}`);
     }
     const communityTreasuryId = AccountId.fromSolidityAddress(communityTreasuryAddress).toString();
 
@@ -252,13 +255,13 @@ async function main() {
                 new ContractFunctionParameters()
                     .addAddress(timelockAddress) // feeToSetter
             )
-            .setGas(130_000) // 111,422
+            .setGas(1_000_000)
             .execute(client);
         const createPangolinFactoryRx = await createPangolinFactoryTx.getReceipt(client);
         pangolinFactoryAddress = `0x${createPangolinFactoryRx.contractId.toSolidityAddress()}`;
-        console.log(`PangolinFactory: ${pangolinFactoryAddress}`);
         deployment['PangolinFactory'] = pangolinFactoryAddress;
         writePartialDeployment();
+        console.log(`PangolinFactory: ${pangolinFactoryAddress}`);
     }
     const pangolinFactoryId = AccountId.fromSolidityAddress(pangolinFactoryAddress).toString();
 
@@ -275,15 +278,14 @@ async function main() {
                     .addAddress(pangolinFactoryAddress) // factory
                     .addAddress(wrappedNativeTokenContractAddress) // whbar
             )
-            .setGas(900_000) // 771,010
+            .setGas(1_500_000)
             .execute(client);
         const createPangolinRouterRx = await createPangolinRouterTx.getReceipt(client);
         pangolinRouterAddress = `0x${createPangolinRouterRx.contractId.toSolidityAddress()}`;
-        console.log(`PangolinRouter: ${pangolinRouterAddress}`);
         deployment['PangolinRouter'] = pangolinRouterAddress;
         writePartialDeployment();
+        console.log(`PangolinRouter: ${pangolinRouterAddress}`);
     }
-
 
     // Create PNG/WHBAR as first pair (required for PangolinFactory creation)
     let firstPairAddress;
@@ -298,16 +300,15 @@ async function main() {
                     .addAddress(pngHTSAddress)
                     .addAddress(wrappedNativeTokenHTSAddress)
             )
-            .setGas(2_900_000) // 2,631,106
+            .setGas(3_500_000)
             .setPayableAmount(new Hbar(Math.ceil(1.10 / HBAR_USD_PRICE))) // $1.00
             .execute(client);
         const createFirstPairRx = await createFirstPairTx.getRecord(client);
         firstPairAddress = `0x${createFirstPairRx.contractFunctionResult.getAddress(0)}`;
-        console.log(`Pair PNG/WHBAR (Contract): ${firstPairAddress}`);
         deployment['Pair PNG/WHBAR (Contract)'] = firstPairAddress;
         writePartialDeployment();
+        console.log(`Pair PNG/WHBAR (Contract): ${firstPairAddress}`);
     }
-
 
     // PangoChef
     let pangoChefAddress;
@@ -324,16 +325,15 @@ async function main() {
                     .addAddress(pangolinFactoryAddress) // newFactory
                     .addAddress(wrappedNativeTokenHTSAddress) // newWrappedNativeToken
             )
-            .setGas(3_000_000) // 2,768,485
+            .setGas(3_200_000)
             .execute(client);
         const createPangoChefRx = await createPangoChefTx.getReceipt(client);
         pangoChefAddress = `0x${createPangoChefRx.contractId.toSolidityAddress()}`;
-        console.log(`PangoChef: ${pangoChefAddress}`);
         deployment['PangoChef'] = pangoChefAddress;
         writePartialDeployment();
+        console.log(`PangoChef: ${pangoChefAddress}`);
     }
     const pangoChefId = AccountId.fromSolidityAddress(pangoChefAddress).toString();
-
 
     // RewardFundingForwarder (PangoChef)
     let pangoChefRewardFundingForwarderAddress;
@@ -347,16 +347,15 @@ async function main() {
                 new ContractFunctionParameters()
                     .addAddress(pangoChefAddress) // pangoChef
             )
-            .setGas(900_000)
+            .setGas(1_000_000)
             .execute(client);
         const createPangoChefRewardFundingForwarderRx = await createPangoChefRewardFundingForwarderTx.getReceipt(client);
         pangoChefRewardFundingForwarderAddress = `0x${createPangoChefRewardFundingForwarderRx.contractId.toSolidityAddress()}`;
-        console.log(`RewardFundingForwarder (PangoChef): ${pangoChefRewardFundingForwarderAddress}`);
         deployment['RewardFundingForwarder (PangoChef)'] = pangoChefRewardFundingForwarderAddress;
         writePartialDeployment();
+        console.log(`RewardFundingForwarder (PangoChef): ${pangoChefRewardFundingForwarderAddress}`);
     }
     const pangoChefRewardFundingForwarderId = AccountId.fromSolidityAddress(pangoChefRewardFundingForwarderAddress).toString();
-
 
     // PangolinStakingPositions
     let pangolinStakingPositionsAddress;
@@ -371,17 +370,16 @@ async function main() {
                     .addAddress(pngHTSAddress) // newRewardsToken
                     .addAddress(deployerAddress) // newAdmin (deployer for now and will be set to Multisig later)
             )
-            .setGas(1_400_000) // 1,390,489
+            .setGas(2_000_000)
             .setInitialBalance(new Hbar(Math.ceil(1.10 / HBAR_USD_PRICE))) // $0.95
             .execute(client);
         const createPangolinStakingPositionsRx = await createPangolinStakingPositionsTx.getReceipt(client);
         pangolinStakingPositionsAddress = `0x${createPangolinStakingPositionsRx.contractId.toSolidityAddress()}`;
-        console.log(`PangolinStakingPositions: ${pangolinStakingPositionsAddress}`);
         deployment['PangolinStakingPositions'] = pangolinStakingPositionsAddress;
         writePartialDeployment();
+        console.log(`PangolinStakingPositions: ${pangolinStakingPositionsAddress}`);
     }
     const pangolinStakingPositionsId = AccountId.fromSolidityAddress(pangolinStakingPositionsAddress).toString();
-
 
     // Pangolin Staking Positions NFT HTS Information
     let pangolinStakingPositionsHTSAddress;
@@ -391,15 +389,14 @@ async function main() {
     } else {
         const positionsTokenQueryTx = await new ContractCallQuery()
             .setContractId(pangolinStakingPositionsId)
-            .setGas(24_000) // 21,284
+            .setGas(30_000)
             .setFunction('positionsToken')
             .execute(client);
         pangolinStakingPositionsHTSAddress = `0x${positionsTokenQueryTx.getAddress(0)}`;
-        console.log(`SSS NFT (HTS): ${pangolinStakingPositionsHTSAddress}`);
         deployment['SSS NFT (HTS)'] = pangolinStakingPositionsHTSAddress;
         writePartialDeployment();
+        console.log(`SSS NFT (HTS): ${pangolinStakingPositionsHTSAddress}`);
     }
-
 
     // EmissionDiversionFromPangoChefToPangolinStakingPositions
     let emissionDiversionFromPangoChefToPangolinStakingPositionsAddress;
@@ -407,7 +404,6 @@ async function main() {
         emissionDiversionFromPangoChefToPangolinStakingPositionsAddress = deployment['EmissionDiversionFromPangoChefToPangolinStakingPositions'];
         console.log(`EmissionDiversionFromPangoChefToPangolinStakingPositions: ${emissionDiversionFromPangoChefToPangolinStakingPositionsAddress}`);
     } else {
-        console.log(`Deploying EmissionDiversionFromPangoChefToPangolinStakingPositions ...`);
         const createEmissionDiversionFromPangoChefToPangolinStakingPositionsTx = await new ContractCreateFlow()
             .setBytecode(EmissionDiversionFromPangoChefToPangolinStakingPositions.bytecode)
             .setConstructorParameters(
@@ -415,16 +411,15 @@ async function main() {
                     .addAddress(pangoChefAddress)
                     .addAddress(pangolinStakingPositionsAddress)
             )
-            .setGas(950_000) // 793,453
+            .setGas(1_500_000)
             .execute(client);
         const createEmissionDiversionFromPangoChefToPangolinStakingPositionsRx = await createEmissionDiversionFromPangoChefToPangolinStakingPositionsTx.getReceipt(client);
         emissionDiversionFromPangoChefToPangolinStakingPositionsAddress = `0x${createEmissionDiversionFromPangoChefToPangolinStakingPositionsRx.contractId.toSolidityAddress()}`;
-        console.log(`EmissionDiversionFromPangoChefToPangolinStakingPositions: ${emissionDiversionFromPangoChefToPangolinStakingPositionsAddress}`);
         deployment['EmissionDiversionFromPangoChefToPangolinStakingPositions'] = emissionDiversionFromPangoChefToPangolinStakingPositionsAddress;
         writePartialDeployment();
+        console.log(`EmissionDiversionFromPangoChefToPangolinStakingPositions: ${emissionDiversionFromPangoChefToPangolinStakingPositionsAddress}`);
     }
     const emissionDiversionFromPangoChefToPangolinStakingPositionsId = AccountId.fromSolidityAddress(emissionDiversionFromPangoChefToPangolinStakingPositionsAddress).toString();
-
 
     // GovernorPango
     let governorPangoAddress;
@@ -438,19 +433,18 @@ async function main() {
                 .addAddress(timelockAddress) // timelock
                 .addAddress(pangolinStakingPositionsHTSAddress) // PangolinStakingPositions HTS NFT
                 .addAddress(pangolinStakingPositionsAddress) // PangolinStakingPositions contract
-                .addUint96('2000000' + '0'.repeat(8)) // proposal threshold
-                .addUint96('500000' + '0'.repeat(8)) // proposal threshold min
-                .addUint96('115000000' + '0'.repeat(8)) // proposal threshold max
+                .addUint96(PROPOSAL_THRESHOLD) // proposal threshold
+                .addUint96(PROPOSAL_THRESHOLD_MIN) // proposal threshold min
+                .addUint96(PROPOSAL_THRESHOLD_MAX) // proposal threshold max
             )
-            .setGas(200_000)
+            .setGas(500_000)
             .execute(client);
         const createGovernorPangoRx = await createGovernorPangoTx.getReceipt(client);
         governorPangoAddress = `0x${createGovernorPangoRx.contractId.toSolidityAddress()}`;
-        console.log(`GovernorPango: ${governorPangoAddress}`);
         deployment['GovernorPango'] = governorPangoAddress;
         writePartialDeployment();
+        console.log(`GovernorPango: ${governorPangoAddress}`);
     }
-
 
     // Multicall2
     let multicall2Address;
@@ -460,66 +454,121 @@ async function main() {
     } else {
         const createMulticall2Tx = await new ContractCreateFlow()
             .setBytecode(multicall2.bytecode)
-            .setGas(100_000)
+            .setGas(300_000)
             .execute(client);
         const createMulticall2Rx = await createMulticall2Tx.getReceipt(client);
         multicall2Address = `0x${createMulticall2Rx.contractId.toSolidityAddress()}`;
-        console.log(`Multicall2: ${multicall2Address}`);
         deployment['Multicall2'] = multicall2Address;
         writePartialDeployment();
+        console.log(`Multicall2: ${multicall2Address}`);
     }
 
     console.log('============================== CONFIGURATION: MULTISIG ==============================');
 
-    const associateTokensMultisigTx = await new TokenAssociateTransaction()
-        .setAccountId(AccountId.fromSolidityAddress(multisigAddress))
-        .setTokenIds([
-            TokenId.fromSolidityAddress(pngHTSAddress),
-            TokenId.fromSolidityAddress(wrappedNativeTokenHTSAddress),
-            TokenId.fromSolidityAddress(pangolinStakingPositionsHTSAddress),
-        ])
-        .setTransactionId(TransactionId.generate(AccountId.fromSolidityAddress(multisigAddress)))
-        .execute(client);
-    const associateTokensMultisigRx = await associateTokensMultisigTx.getReceipt(client);
-    console.log(`Associated PBAR, WHBAR, and SSS to multisig`);
+    // Ensure 'config' map exists
+    if (!deployment.config) {
+        deployment.config = {};
+    }
 
+    if (!deployment.config['Associate Multisig Tokens']) {
+        const associateTokensMultisigTx = await new TokenAssociateTransaction()
+            .setAccountId(AccountId.fromSolidityAddress(multisigAddress))
+            .setTokenIds([
+                TokenId.fromSolidityAddress(pngHTSAddress),
+                TokenId.fromSolidityAddress(wrappedNativeTokenHTSAddress),
+                TokenId.fromSolidityAddress(pangolinStakingPositionsHTSAddress),
+            ])
+            .setTransactionId(TransactionId.generate(AccountId.fromSolidityAddress(multisigAddress)))
+            .execute(client);
+        const associateTokensMultisigRx = await associateTokensMultisigTx.getReceipt(client);
+        deployment.config['Associate Multisig Tokens'] = true;
+        writePartialDeployment();
+        console.log(`Associated PBAR, WHBAR, and SSS to multisig`);
+    }
 
     console.log('============================== CONFIGURATION: TIMELOCK ==============================');
 
-    // Begin process of setting Timelock admin to GovernorPango
     const queuePendingAdmin_bytes = new ContractFunctionParameters().addAddress(governorPangoAddress)._build();
-    const queuePendingAdmin_eta = Math.ceil(Date.now() / 1000) + TIMELOCK_DELAY + 60;
-    const queuePendingAdminTx = await new ContractExecuteTransaction()
-        .setContractId(timelockId)
-        .setFunction('queueTransaction',
-            new ContractFunctionParameters()
-                .addAddress(timelockAddress) // target
-                .addUint256(0) // value
-                .addString('setPendingAdmin(address)') // signature
-                .addBytes(queuePendingAdmin_bytes) // data
-                .addUint256(queuePendingAdmin_eta) // eta
-        )
-        .setGas(1_000_000)
-        .execute(client);
-    const queuePendingAdminRx = await queuePendingAdminTx.getReceipt(client);
-    console.log(`Queued GovernorPango as pending Timelock admin`);
 
-    // Wait for TIMELOCK_DELAY seconds ...
-    // Call Timelock.executeTransaction(timelockAddress, 0, queuePendingAdmin_bytes, queuePendingAdmin_eta)
-    // Call GovernorPango.__acceptAdmin()
+    if (!deployment.config['Queue Timelock Admin Change']) {
+        const queuePendingAdmin_eta = Math.ceil(Date.now() / 1000) + TIMELOCK_DELAY + 30;
+
+        const queuePendingAdminTx = await new ContractExecuteTransaction()
+            .setContractId(timelockId)
+            .setFunction('queueTransaction',
+                new ContractFunctionParameters()
+                    .addAddress(timelockAddress) // target
+                    .addUint256(0) // value
+                    .addString('setPendingAdmin(address)') // signature
+                    .addBytes(queuePendingAdmin_bytes) // data
+                    .addUint256(queuePendingAdmin_eta) // eta
+            )
+            .setGas(1_500_000)
+            .execute(client);
+        const queuePendingAdminRx = await queuePendingAdminTx.getReceipt(client);
+        deployment.config['Queue Timelock Admin Change'] = true;
+        deployment.config['Queue Timelock Admin Change ETA'] = queuePendingAdmin_eta;
+        writePartialDeployment();
+        console.log(`Queued GovernorPango as pending Timelock admin`);
+    }
+
+    if (process.env.NETWORK === 'testnet') {
+        if (!deployment.config['Execute Timelock Admin Change']) {
+            const eta = deployment.config['Queue Timelock Admin Change ETA'];
+            const waitTimeMs = eta - Date.now();
+
+            if (waitTimeMs > 0) {
+                console.log(`Waiting for timelock delay of ${(waitTimeMs / 1000).toFixed()} seconds ...`);
+                await new Promise(resolve => setTimeout(resolve, waitTimeMs));
+            }
+
+            const executePendingAdminTx = await new ContractExecuteTransaction()
+                .setContractId(timelockId)
+                .setFunction('executeTransaction',
+                    new ContractFunctionParameters()
+                        .addAddress(timelockAddress) // target
+                        .addUint256(0) // value
+                        .addString('setPendingAdmin(address)') // signature
+                        .addBytes(queuePendingAdmin_bytes) // data
+                        .addUint256(eta) // eta
+                )
+                .setGas(150_000)
+                .execute(client);
+            const executePendingAdminRx = await executePendingAdminTx.getReceipt(client);
+            deployment.config['Execute Timelock Admin Change'] = true;
+            writePartialDeployment();
+            console.log(`Executed GovernorPango as pending Timelock admin`);
+        }
+
+        if (!deployment.config['Accept Timelock Admin Change']) {
+            const acceptAdminTx = await new ContractExecuteTransaction()
+                .setContractId(ContractId.fromSolidityAddress(governorPangoAddress))
+                .setFunction('__acceptAdmin')
+                .setGas(150_000)
+                .execute(client);
+            const acceptAdminRx = await acceptAdminTx.getReceipt(client);
+            deployment.config['Accept Timelock Admin Change'] = true;
+            writePartialDeployment();
+            console.log(`Accepted GovernorPango as Timelock admin`);
+        }
+    }
 
     console.log('============================== CONFIGURATION: COMMUNITY TREASURY ==============================');
 
-    const transferOwnershipCommunityTreasuryTx = await new ContractExecuteTransaction()
-        .setContractId(communityTreasuryId)
-        .setFunction('transferOwnership',
-            new ContractFunctionParameters()
-                .addAddress(timelockAddress)
-        )
-        .setGas(35_000)
-        .execute(client);
-    const transferOwnershipCommunityTreasuryRx = await transferOwnershipCommunityTreasuryTx.getReceipt(client);
-    console.log('Transferred ownership of CommunityTreasury to Timelock');
+    if (!deployment.config['Transfer Community Treasury Ownership']) {
+        const transferOwnershipCommunityTreasuryTx = await new ContractExecuteTransaction()
+            .setContractId(communityTreasuryId)
+            .setFunction('transferOwnership',
+                new ContractFunctionParameters()
+                    .addAddress(timelockAddress)
+            )
+            .setGas(150_000)
+            .execute(client);
+        const transferOwnershipCommunityTreasuryRx = await transferOwnershipCommunityTreasuryTx.getReceipt(client);
+        deployment.config['Transfer Community Treasury Ownership'] = true;
+        writePartialDeployment();
+        console.log('Transferred ownership of CommunityTreasury to Timelock');
+    }
 
     console.log('============================== CONFIGURATION: TREASURY VESTER ==============================');
 
@@ -543,36 +592,48 @@ async function main() {
     const vesterAccounts = VESTER_ALLOCATIONS.map(({address}) => address);
     const vesterAllocations = VESTER_ALLOCATIONS.map(({allocation}) => allocation);
 
-    const setRecipientsTx = await new ContractExecuteTransaction()
-        .setContractId(treasuryVesterId)
-        .setFunction('setRecipients',
-            new ContractFunctionParameters()
-                .addAddressArray(vesterAccounts) // accounts
-                .addInt64Array(vesterAllocations) // allocations
-        )
-        .setGas(130_000) // 120,821
-        .execute(client);
-    const setRecipientsRx = await setRecipientsTx.getReceipt(client);
-    console.log(`Treasury vester recipients set`);
+    if (!deployment.config['Set Vester Recipients']) {
+        const setRecipientsTx = await new ContractExecuteTransaction()
+            .setContractId(treasuryVesterId)
+            .setFunction('setRecipients',
+                new ContractFunctionParameters()
+                    .addAddressArray(vesterAccounts) // accounts
+                    .addInt64Array(vesterAllocations) // allocations
+            )
+            .setGas(300_000)
+            .execute(client);
+        const setRecipientsRx = await setRecipientsTx.getReceipt(client);
+        deployment.config['Set Vester Recipients'] = true;
+        writePartialDeployment();
+        console.log(`Treasury vester recipients set`);
+    }
 
-    const unpauseTreasuryVesterTx = await new ContractExecuteTransaction()
-        .setContractId(treasuryVesterId)
-        .setFunction('unpause')
-        .setGas(32_000) // 27,120
-        .execute(client);
-    const unpauseTreasuryVesterRx = await unpauseTreasuryVesterTx.getReceipt(client);
-    console.log(`Vesting un-paused`);
+    if (!deployment.config['Unpause Vester']) {
+        const unpauseTreasuryVesterTx = await new ContractExecuteTransaction()
+            .setContractId(treasuryVesterId)
+            .setFunction('unpause')
+            .setGas(100_000)
+            .execute(client);
+        const unpauseTreasuryVesterRx = await unpauseTreasuryVesterTx.getReceipt(client);
+        deployment.config['Unpause Vester'] = true;
+        writePartialDeployment();
+        console.log(`Vesting un-paused`);
+    }
 
-    const transferInitialSupplyTx = await new ContractExecuteTransaction()
-        .setContractId(treasuryVesterId)
-        .setFunction('transferInitialSupply',
-            new ContractFunctionParameters()
-                .addAddress(multisigAddress)
-        )
-        .setGas(200_000)
-        .execute(client);
-    const transferInitialSupplyRx = await transferInitialSupplyTx.getReceipt(client);
-    console.log(`Transferred initial PBAR supply to multisig`);
+    if (!deployment.config['Transfer Initial PBAR Supply to Multisig']) {
+        const transferInitialSupplyTx = await new ContractExecuteTransaction()
+            .setContractId(treasuryVesterId)
+            .setFunction('transferInitialSupply',
+                new ContractFunctionParameters()
+                    .addAddress(multisigAddress)
+            )
+            .setGas(400_000)
+            .execute(client);
+        const transferInitialSupplyRx = await transferInitialSupplyTx.getReceipt(client);
+        deployment.config['Transfer Initial PBAR Supply to Multisig'] = true;
+        writePartialDeployment();
+        console.log(`Transferred initial PBAR supply to multisig`);
+    }
 
     await grantRole(treasuryVesterId, ROLES.DEFAULT_ADMIN_ROLE, multisigAddress);
 
@@ -580,26 +641,34 @@ async function main() {
 
     console.log('============================== CONFIGURATION: PANGOCHEF ==============================');
 
-    const approvePangoChefRewardFundingForwarderTx = await new ContractExecuteTransaction()
-        .setContractId(pangoChefRewardFundingForwarderId)
-        .setFunction('approve')
-        .setGas(900_000)
-        .execute(client);
-    const approvePangoChefRewardFundingForwarderRx = await approvePangoChefRewardFundingForwarderTx.getReceipt(client);
-    console.log(`Setup approval for RewardFundingForwarder (PangoChef)`);
+    if (!deployment.config['Approve PangoChefRewardFundingForwarder']) {
+        const approvePangoChefRewardFundingForwarderTx = await new ContractExecuteTransaction()
+            .setContractId(pangoChefRewardFundingForwarderId)
+            .setFunction('approve')
+            .setGas(1_500_000)
+            .execute(client);
+        const approvePangoChefRewardFundingForwarderRx = await approvePangoChefRewardFundingForwarderTx.getReceipt(client);
+        deployment.config['Approve PangoChefRewardFundingForwarder'] = true;
+        writePartialDeployment();
+        console.log(`Setup approval for RewardFundingForwarder (PangoChef)`);
+    }
 
-    const initializeEmissionDiversionFarmTx = await new ContractExecuteTransaction()
-        .setContractId(pangoChefId)
-        .setFunction('initializePool',
-            new ContractFunctionParameters()
-                .addAddress(emissionDiversionFromPangoChefToPangolinStakingPositionsAddress) // tokenOrRecipient
-                .addAddress('0x0000000000000000000000000000000000000000') // pairContract
-                .addUint8(2) // poolType
-        )
-        .setGas(200_000)
-        .execute(client);
-    const initializeEmissionDiversionFarmRx = await initializeEmissionDiversionFarmTx.getReceipt(client);
-    console.log(`Initialized emission diversion farm`);
+    if (!deployment.config['Initialize Emission Diversion Farm']) {
+        const initializeEmissionDiversionFarmTx = await new ContractExecuteTransaction()
+            .setContractId(pangoChefId)
+            .setFunction('initializePool',
+                new ContractFunctionParameters()
+                    .addAddress(emissionDiversionFromPangoChefToPangolinStakingPositionsAddress) // tokenOrRecipient
+                    .addAddress('0x0000000000000000000000000000000000000000') // pairContract
+                    .addUint8(2) // poolType
+            )
+            .setGas(400_000)
+            .execute(client);
+        const initializeEmissionDiversionFarmRx = await initializeEmissionDiversionFarmTx.getReceipt(client);
+        deployment.config['Initialize Emission Diversion Farm'] = true;
+        writePartialDeployment();
+        console.log(`Initialized emission diversion farm`);
+    }
 
     await grantRole(pangoChefId, ROLES.FUNDER_ROLE, vestingBotAddress);
     await grantRole(pangoChefId, ROLES.FUNDER_ROLE, pangoChefRewardFundingForwarderAddress);
@@ -613,13 +682,17 @@ async function main() {
 
     console.log('============================== CONFIGURATION: STAKING POSITIONS ==============================');
 
-    const approveEmissionDiversionFromPangoChefToPangolinStakingPositionsTx = await new ContractExecuteTransaction()
-        .setContractId(emissionDiversionFromPangoChefToPangolinStakingPositionsId)
-        .setFunction('approve')
-        .setGas(900_000) // 732,126
-        .execute(client);
-    const approveEmissionDiversionFromPangoChefToPangolinStakingPositionsRx = await approveEmissionDiversionFromPangoChefToPangolinStakingPositionsTx.getReceipt(client);
-    console.log(`Setup approval for EmissionDiversionFromPangoChefToPangolinStakingPositions`);
+    if (!deployment.config['Approval for EmissionDiversionFromPangoChefToPangolinStakingPositions']) {
+        const approveEmissionDiversionFromPangoChefToPangolinStakingPositionsTx = await new ContractExecuteTransaction()
+            .setContractId(emissionDiversionFromPangoChefToPangolinStakingPositionsId)
+            .setFunction('approve')
+            .setGas(1_500_000)
+            .execute(client);
+        const approveEmissionDiversionFromPangoChefToPangolinStakingPositionsRx = await approveEmissionDiversionFromPangoChefToPangolinStakingPositionsTx.getReceipt(client);
+        deployment.config['Approval for EmissionDiversionFromPangoChefToPangolinStakingPositions'] = true;
+        writePartialDeployment();
+        console.log(`Setup approval for EmissionDiversionFromPangoChefToPangolinStakingPositions`);
+    }
 
     await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, vestingBotAddress);
     await grantRole(pangolinStakingPositionsId, ROLES.FUNDER_ROLE, emissionDiversionFromPangoChefToPangolinStakingPositionsAddress);
@@ -688,53 +761,43 @@ function writeFullDeployment() {
 }
 
 async function grantRole(contractId, roleHash, accountAddress) {
-    let retryCount = 0;
-    while (true) {
-        try {
-            console.log(`Granting role ${contractId}:${roleHash} to ${accountAddress} ...`);
-            const grantRoleTx = await new ContractExecuteTransaction()
-                .setContractId(contractId)
-                .setFunction('grantRole',
-                    new ContractFunctionParameters()
-                        .addBytes32(ethers.utils.arrayify(roleHash))
-                        .addAddress(accountAddress)
-                )
-                .setGas(200_000) // wtf
-                .execute(client);
-            const grantRoleRx = await grantRoleTx.getReceipt(client);
-            console.log(`Role granted!`);
-            break;
-        } catch (e) {
-            if (++retryCount >= 2) {
-                throw e;
-            }
-            console.log(`Role grant retry attempt #${retryCount}/2`);
-        }
+    const description = `Granting role ${contractId}:${roleHash} to ${accountAddress}`;
+
+    if (!deployment.config[description]) {
+        console.log(`${description} ...`);
+        const grantRoleTx = await new ContractExecuteTransaction()
+            .setContractId(contractId)
+            .setFunction('grantRole',
+                new ContractFunctionParameters()
+                    .addBytes32(ethers.utils.arrayify(roleHash))
+                    .addAddress(accountAddress)
+            )
+            .setGas(400_000)
+            .execute(client);
+        const grantRoleRx = await grantRoleTx.getReceipt(client);
+        deployment.config[description] = true;
+        writePartialDeployment();
+        console.log(`Role granted!`);
     }
 }
 
 async function renounceRole(contractId, roleHash, accountAddress) {
-    let retryCount = 0;
-    while (true) {
-        try {
-            console.log(`Renouncing role ${contractId}:${roleHash} from ${accountAddress} ...`);
-            const renounceRoleTx = await new ContractExecuteTransaction()
-                .setContractId(contractId)
-                .setFunction('renounceRole',
-                    new ContractFunctionParameters()
-                        .addBytes32(ethers.utils.arrayify(roleHash))
-                        .addAddress(accountAddress)
-                )
-                .setGas(200_000) // wtf
-                .execute(client);
-            const renounceRoleRx = await renounceRoleTx.getReceipt(client);
-            console.log(`Role renounced!`);
-            break;
-        } catch (e) {
-            if (++retryCount >= 2) {
-                throw e;
-            }
-            console.log(`Role renounce retry attempt #${retryCount}/2`);
-        }
+    const description = `Renouncing role ${contractId}:${roleHash} from ${accountAddress}`;
+
+    if (!deployment.config[description]) {
+        console.log(`${description} ...`);
+        const renounceRoleTx = await new ContractExecuteTransaction()
+            .setContractId(contractId)
+            .setFunction('renounceRole',
+                new ContractFunctionParameters()
+                    .addBytes32(ethers.utils.arrayify(roleHash))
+                    .addAddress(accountAddress)
+            )
+            .setGas(400_000)
+            .execute(client);
+        const renounceRoleRx = await renounceRoleTx.getReceipt(client);
+        deployment.config[description] = true;
+        writePartialDeployment();
+        console.log(`Role renounced!`);
     }
 }
